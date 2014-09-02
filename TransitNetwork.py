@@ -32,12 +32,14 @@ class TransitNetwork(Network):
     # Static reference to a TransitCapacity instance
     capacity = None
 
-    def __init__(self, champVersion, basenetworkpath=None, isTiered=False, networkName=None):
+    def __init__(self, champVersion, basenetworkpath=None, networkBaseDir=None, networkProjectSubdir=None,
+                 networkSeedSubdir=None, networkPlanSubdir=None, isTiered=False, networkName=None):
         """
         If *basenetworkpath* is passed and *isTiered* is True, then start by reading the files
         named *networkName*.* in the *basenetworkpath*
         """
-        Network.__init__(self, champVersion, networkName)
+        Network.__init__(self, champVersion, networkBaseDir, networkProjectSubdir, networkSeedSubdir,
+                         networkPlanSubdir, networkName)
         self.lines = []
         self.links = []
         self.pnrs   = []
@@ -1022,31 +1024,6 @@ class TransitNetwork(Network):
                     WranglerLogger.debug("TransitNetwork.checkValidityOfLinks: (%d, %d) not in the roadway network nor in the off-road links (line %s)" % (a, b, line.name))
                 
                 last_node = node
-                
-            
-            
-    def getProjectVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
-        """        
-        Returns champVersion for this project
-
-        See :py:meth:`Wrangler.Network.applyProject` for argument details.
-        """
-        if projectsubdir:
-            projectname = projectsubdir
-            sys.path.append(os.path.join(os.getcwd(), parentdir, networkdir))
-
-        else:
-            projectname = networkdir
-            sys.path.append(os.path.join(os.getcwd(), parentdir))
-        
-        evalstr = "import %s" % projectname
-        exec(evalstr)
-        evalstr = "dir(%s)" % projectname
-        projectdir = eval(evalstr)
-        
-        # WranglerLogger.debug("projectdir = " + str(projectdir))
-        pchampVersion = (eval("%s.champVersion()" % projectname) if 'champVersion' in projectdir else Network.CHAMP_VERSION_DEFAULT)
-        return pchampVersion
 
     def applyProject(self, parentdir, networkdir, gitdir, projectsubdir=None, **kwargs):
         """
