@@ -1,4 +1,4 @@
-import sys
+import os,sys
 
 __all__ = ['Node']
 
@@ -105,7 +105,7 @@ class Node(object):
         
         try:
             import xlrd
-            workbook = xlrd.open_workbook(filename=r"Y:\champ\util\nodes.xls",
+            workbook = xlrd.open_workbook(filename=os.environ["CHAMP_node_names"],
                                           encoding_override='ascii')
             sheet    = workbook.sheet_by_name("equiv")
             row = 0

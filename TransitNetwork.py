@@ -32,12 +32,14 @@ class TransitNetwork(Network):
     # Static reference to a TransitCapacity instance
     capacity = None
 
-    def __init__(self, champVersion, basenetworkpath=None, isTiered=False, networkName=None):
+    def __init__(self, champVersion, basenetworkpath=None, networkBaseDir=None, networkProjectSubdir=None,
+                 networkSeedSubdir=None, networkPlanSubdir=None, isTiered=False, networkName=None):
         """
         If *basenetworkpath* is passed and *isTiered* is True, then start by reading the files
         named *networkName*.* in the *basenetworkpath*
         """
-        Network.__init__(self, champVersion, networkName)
+        Network.__init__(self, champVersion, networkBaseDir, networkProjectSubdir, networkSeedSubdir,
+                         networkPlanSubdir, networkName)
         self.lines = []
         self.links = []
         self.pnrs   = []
@@ -244,7 +246,7 @@ class TransitNetwork(Network):
                         WranglerLogger.warning(errorstr)
                         # raise NetworkException(errorstr)
                         
-        book = xlrd.open_workbook(r"Y:\CHAMP\util\nodes.xls")
+        book = xlrd.open_workbook(os.environ["CHAMP_node_names"])
         sh = book.sheet_by_index(0)
         nodeNames = {}
         for rx in range(0,sh.nrows): # skip header
@@ -300,6 +302,56 @@ class TransitNetwork(Network):
             return allLines
         raise NetworkException('Line name not found: %s' % (name,))
     
+    def deleteLinkForNodes(self, nodeA, nodeB, include_reverse=True):
+        """
+        Delete any TransitLink in self.links[] from nodeA to nodeB (these should be integers).
+        If include_reverse, also delete from nodeB to nodeA.
+        Returns number of links deleted.
+        """
+        del_idxs = []
+        for idx in range(len(self.links)-1,-1,-1): # go backwards
+            if not isinstance(self.links[idx],TransitLink): continue
+            if self.links[idx].Anode == nodeA and self.links[idx].Bnode == nodeB:
+                del_idxs.append(idx)
+            elif include_reverse and self.links[idx].Anode == nodeB and self.links[idx].Bnode == nodeA:
+                del_idxs.append(idx)
+
+        for del_idx in del_idxs:
+            WranglerLogger.debug("Removing link %s" % str(self.links[del_idx]))
+            del self.links[del_idx]
+        
+        return len(del_idxs)
+    
+    def deleteAccessXferLinkForNode(self, nodenum, access_links=True, xfer_links=True):
+        """
+        Delete any Linki in self.accessli (if access_links) and/or self.xferli (if xfer_links)
+        with Anode or Bnode as nodenum.
+        Returns number of links deleted.
+        """
+        del_acc_idxs = []
+        if access_links:
+            for idx in range(len(self.accessli)-1,-1,-1): # go backwards
+                if not isinstance(self.accessli[idx],Linki): continue
+                if int(self.accessli[idx].A) == nodenum or int(self.accessli[idx].B) == nodenum:
+                    del_acc_idxs.append(idx)
+            
+            for del_idx in del_acc_idxs:
+                WranglerLogger.debug("Removing access link %s" % str(self.accessli[del_idx]))
+                del self.accessli[del_idx]
+
+        del_xfer_idxs = []
+        if xfer_links:
+            for idx in range(len(self.xferli)-1,-1,-1): # go backwards
+                if not isinstance(self.xferli[idx],Linki): continue
+                if int(self.xferli[idx].A) == nodenum or int(self.xferli[idx].B) == nodenum:
+                    del_xfer_idxs.append(idx)
+            
+            for del_idx in del_xfer_idxs:
+                WranglerLogger.debug("Removing xfere link %s" % str(self.xferli[del_idx]))
+                del self.xferli[del_idx]
+                
+        return len(del_acc_idxs) + len(del_xfer_idxs)
+                
     def splitLinkInTransitLines(self,nodeA,nodeB,newNode,stop=False):
         """
         Goes through each line and for any with links going from *nodeA* to *nodeB*, inserts
@@ -419,12 +471,20 @@ class TransitNetwork(Network):
                 WranglerLogger.debug(self.line(linename))
 
 
-    def write(self, path='.', name='transit', writeEmptyFiles=True, suppressQuery=False, suppressValidation=False):
+    def write(self, path='.', name='transit', writeEmptyFiles=True, suppressQuery=False, suppressValidation=False,
+              cubeNetFileForValidation=None):
         """
         Write out this full transit network to disk in path specified.
         """
         if not suppressValidation:
             self.validateWnrsAndPnrs()
+            
+            if not cubeNetFileForValidation:
+                WranglerLogger.fatal("Trying to validate TransitNetwork but cubeNetFileForValidation not passed")
+                exit(2)
+            
+            self.checkValidityOfLinks(cubeNetFile=cubeNetFileForValidation)
+
         
         if not os.path.exists(path):
             WranglerLogger.debug("\nPath [%s] doesn't exist; creating." % path)
@@ -909,28 +969,61 @@ class TransitNetwork(Network):
                         failures += 1
         return (failures == 0)
     
-    def getProjectVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
-        """        
-        Returns champVersion for this project
-
-        See :py:meth:`Wrangler.Network.applyProject` for argument details.
+    def checkValidityOfLinks(self, cubeNetFile):
         """
-        if projectsubdir:
-            projectname = projectsubdir
-            sys.path.append(os.path.join(os.getcwd(), parentdir, networkdir))
+        Checks the validity of each of the transit links against the given cubeNetFile.
+        That is, each link in a .lin should either be in the roadway network, or in a .link file.
+        """
+        import Cube
+    
+        (nodes_dict, links_dict) = Cube.import_cube_nodes_links_from_csvs(cubeNetFile,
+                                        extra_link_vars=['LANE_AM', 'LANE_OP','LANE_PM',
+                                                         'BUSLANE_AM', 'BUSLANE_OP', 'BUSLANE_PM'],
+                                        extra_node_vars=[],
+                                        links_csv=os.path.join(os.getcwd(),"cubenet_validate_links.csv"),
+                                        nodes_csv=os.path.join(os.getcwd(),"cubenet_validate_nodes.csv"),
+                                        exportIfExists=True)
+        for line in self:
+            
+            # todo fix this
+            line_is_oneway = True
+            
+            last_node = None
+            for node in line:
 
-        else:
-            projectname = networkdir
-            sys.path.append(os.path.join(os.getcwd(), parentdir))
-        
-        evalstr = "import %s" % projectname
-        exec(evalstr)
-        evalstr = "dir(%s)" % projectname
-        projectdir = eval(evalstr)
-        
-        # WranglerLogger.debug("projectdir = " + str(projectdir))
-        pchampVersion = (eval("%s.champVersion()" % projectname) if 'champVersion' in projectdir else Network.CHAMP_VERSION_DEFAULT)
-        return pchampVersion
+                # this is the first node - nothing to do                
+                if not last_node:
+                    last_node = node
+                    continue
+                
+                # we need to check this link but possibly also the reverse
+                link_list = [(abs(last_node), abs(node))]
+                if not line_is_oneway:
+                    link_list.append((abs(node), abs(last_node)))
+                
+                # check the link(s)
+                for (a,b) in link_list:
+                    
+                    # it's a road link
+                    if (a,b) in links_dict: continue
+                    
+                    found_link = False
+                    for link in self.links:
+                        if not isinstance(link,TransitLink): continue
+                        
+                        if link.Anode == a and link.Bnode == b:
+                            found_link = True
+                            break
+                        
+                        if not link.isOneway() and link.Anode == b and link.Bnode == a:
+                            found_link = True
+                            break
+                    
+                    if found_link: continue
+
+                    WranglerLogger.debug("TransitNetwork.checkValidityOfLinks: (%d, %d) not in the roadway network nor in the off-road links (line %s)" % (a, b, line.name))
+                
+                last_node = node
 
     def applyProject(self, parentdir, networkdir, gitdir, projectsubdir=None, **kwargs):
         """
@@ -980,6 +1073,6 @@ class TransitNetwork(Network):
                 infile.close()
                 WranglerLogger.debug("Read %5d lines from fare file %s" % (linecount, fullfarefile))
         
-        self.logProject(gitdir=gitdir,
-                        projectname=(networkdir + "\\" + projectsubdir if projectsubdir else networkdir),
-                        year=pyear, projectdesc=pdesc)
+        return self.logProject(gitdir=gitdir,
+                               projectname=(networkdir + "\\" + projectsubdir if projectsubdir else networkdir),
+                               year=pyear, projectdesc=pdesc)

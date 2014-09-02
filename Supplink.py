@@ -31,7 +31,9 @@ class Supplink(dict):
         s = "SUPPLINK N=%5d-%5d " % (self.Anode,self.Bnode)
 
         # Deal w/all link attributes
-        fields = ['%s=%s' % (k,v) for k,v in self.items()]
+        fields = []
+        for k in sorted(self.keys()):
+            fields.append('%s=%s' % (k,self[k]))
 
         s += " ".join(fields)
         if self.comment:

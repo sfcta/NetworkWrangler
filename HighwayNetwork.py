@@ -12,58 +12,62 @@ class HighwayNetwork(Network):
     """
     Representation of a roadway network.
     """
+    cube_hostnames = None
 
-    def __init__(self, champVersion, basenetworkpath, isTiered=False, tag=None,
-                 hwyspecsdir=None, hwyspecs=None, tempdir=None, networkName=None):
+    @staticmethod
+    def getCubeHostnames():
+        """
+        Cube hostnames in Y:\COMMPATH\HostnamesWithCube.txt
+        """
+        # got them already
+        if HighwayNetwork.cube_hostnames: return HighwayNetwork.cube_hostnames
+        
+        # read them
+        HighwayNetwork.cube_hostnames = []
+        f = open(r"Y:\COMMPATH\HostnamesWithCube.txt")
+        for line in f:
+            if line[0] == "#": continue
+            HighwayNetwork.cube_hostnames.append(line.split()[0])  # use the first token of non-comment lines
+        f.close()
+        return HighwayNetwork.cube_hostnames
+
+    def __init__(self, champVersion, basenetworkpath, networkBaseDir=None, networkProjectSubdir=None,
+                 networkSeedSubdir=None, networkPlanSubdir=None, isTiered=False, tag=None,
+                 hwyspecsdir=None, hwyspecs=None, tempdir=None, networkName=None, tierNetworkName=None):
         """
         *basenetworkpath* should be a starting point for this network, and include a ``FREEFLOW.net``,
         as well as ``turns[am,pm,op].pen`` files.  
         Also a shapefile export: FREEFLOW.[dbf,prj,shp] and FREEFLOW_nodes.[dbf,prj,shp]
 
         *isTiered*: when False, checks out the *basenetworkpath* from Y:\networks.  When True,
-        expects the basenetwork path to be a fullpath and uses that.
+        expects the basenetwork path to be a fullpath and uses that.  Can optionally specify tierNetworkName
+        (an alternative to `FREEFLOW.net`.)
 
         *tag*: when not *isTiered*, a tag can optionally be used for cloning the base network
         
         *hwyspecs*, if passed in, should be an instance of :py:class:`HwySpecsRTP`.  It
         is only used for logging.
         """
-        Network.__init__(self, champVersion, networkName)
+        Network.__init__(self, champVersion, networkBaseDir, networkProjectSubdir, networkSeedSubdir,
+                         networkPlanSubdir, networkName)
         
         if isTiered:
             (head,tail) = os.path.split(basenetworkpath)
-            self.applyBasenetwork(head,tail,None)
+            self.applyBasenetwork(head,tail,None, tierNetworkName)
         else:
             self.applyingBasenetwork = True
-            self.cloneAndApplyProject(networkdir=basenetworkpath, tempdir=tempdir, tag=tag)
+            self.cloneAndApplyProject(networkdir=basenetworkpath,tempdir=tempdir, projtype='seed', tag=tag)
 
         # keep a reference of the hwyspecsrtp for logging
         self.hwyspecsdir = hwyspecsdir
         self.hwyspecs = hwyspecs
-
-    def getProjectVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
-        """        
-        Returns champVersion for this project
-
-        See :py:meth:`Wrangler.Network.applyProject` for argument details.
-        """
-        if projectsubdir:
-            champversionFilename = os.path.join(parentdir, networkdir, projectsubdir,"champVersion.txt")
-        else:
-            champversionFilename = os.path.join(parentdir, networkdir,"champVersion.txt")
-
-        try:
-            WranglerLogger.debug("Reading %s" % champversionFilename)
-            champVersion = open(champversionFilename,'r').read()
-            champVersion = champVersion.strip()
-        except:
-            champVersion = Network.CHAMP_VERSION_DEFAULT
-        return champVersion
         
-    def applyBasenetwork(self, parentdir, networkdir, gitdir):
+    def applyBasenetwork(self, parentdir, networkdir, gitdir, tierNetworkName):
         
         # copy the base network file to my workspace
-        shutil.copyfile(os.path.join(parentdir,networkdir,"FREEFLOW.net"), "FREEFLOW.BLD")
+        tierNetwork = os.path.join(parentdir,networkdir,tierNetworkName if tierNetworkName else "FREEFLOW.net")
+        WranglerLogger.debug("Using tier network %s" % tierNetwork)
+        shutil.copyfile(tierNetwork,"FREEFLOW.BLD")
         for filename in ["turnsam.pen",         "turnspm.pen",          "turnsop.pen"]:
             shutil.copyfile(os.path.join(parentdir,networkdir,filename), filename)
 
@@ -80,7 +84,7 @@ class HighwayNetwork(Network):
         """
         # special case: base network
         if self.applyingBasenetwork:
-            self.applyBasenetwork(parentdir, networkdir, gitdir)
+            self.applyBasenetwork(parentdir, networkdir, gitdir, tierNetworkName=None)
             self.logProject(gitdir=gitdir,
                             projectname=(networkdir + "\\" + projectsubdir if projectsubdir else networkdir),
                             projectdesc="Base network")            
@@ -109,11 +113,12 @@ class HighwayNetwork(Network):
 
         # dispatch it, cube license
         hostname = gethostname().lower()
-        if hostname not in ['berry','eureka','taraval','townsend','dolores','stockton','db0v07k1']:
-            f = open('runtpp_dispatch.tmp', 'w')
+        if hostname not in HighwayNetwork.getCubeHostnames():
+            print "Dispatching cube script to taraval from %s" % hostname 
+            f = open(os.path.join(applyDir,'runtpp_dispatch.tmp'), 'w')
             f.write("runtpp " + applyScript + "\n")
             f.close()
-            (cuberet, cubeStdout, cubeStderr) = self._runAndLog("Y:/champ/util/bin/dispatch.bat runtpp_dispatch.tmp taraval", run_dir=applyDir) 
+            (cuberet, cubeStdout, cubeStderr) = self._runAndLog("Y:/champ/util/bin/dispatch.bat runtpp_dispatch.tmp taraval", run_dir=applyDir, logStdoutAndStderr=True) 
         else:
             (cuberet, cubeStdout, cubeStderr) = self._runAndLog(cmd="runtpp "+applyScript, run_dir=applyDir)
             
@@ -156,9 +161,9 @@ class HighwayNetwork(Network):
                        self.hwyspecs.projectdict[projectsubdir]["Action"] + ", " +
                        self.hwyspecs.projectdict[projectsubdir]["Span"])
 
-        self.logProject(gitdir=gitdir,
-                        projectname=(networkdir + "\\" + projectsubdir if projectsubdir else networkdir),
-                        year=year, projectdesc=desc, county=county)
+        return self.logProject(gitdir=gitdir,
+                               projectname=(networkdir + "\\" + projectsubdir if projectsubdir else networkdir),
+                               year=year, projectdesc=desc, county=county)
 
     def write(self, path='.', name='FREEFLOW.NET', writeEmptyFiles=True, suppressQuery=False, suppressValidation=False):
         if not os.path.exists(path):
