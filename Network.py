@@ -1,13 +1,14 @@
 import os, re, string, subprocess, sys, tempfile
 from .Logger import WranglerLogger
 from .NetworkException import NetworkException
-from .Regexes import git_commit_pattern, tag_num_pattern
+from .Regexes import git_commit_pattern
 
 __all__ = ['Network']
 
 class Network(object):
 
     CHAMP_VERSION_DEFAULT = "pre4.3"
+    NETWORK_PROJECTS_DIR  = r"Y:\networks"
     # static variable
     allNetworks = {}
 
@@ -30,7 +31,7 @@ class Network(object):
          (return code, stdout, stderr)
         where stdout and stderr are lists of strings.
         """
-        proc = subprocess.Popen( cmd, cwd = run_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+        proc = subprocess.Popen( cmd, cwd = run_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True )
         retStdout = []
         for line in proc.stdout:
             line = line.strip('\r\n')
@@ -43,7 +44,7 @@ class Network(object):
             if logStdoutAndStderr: WranglerLogger.debug("stderr: " + line)
             retStderr.append(line)
         retcode  = proc.wait()
-        WranglerLogger.debug("Received %d from [%s]" % (retcode, cmd))
+        WranglerLogger.debug("Received %d from [%s] run in [%s]" % (retcode, cmd, run_dir))
         return (retcode, retStdout, retStderr)
 
 
@@ -94,6 +95,8 @@ class Network(object):
         * *projectsubdir* is an optional subdir of *networkdir*; If the ``apply.s`` or ``__init__.py``
           is in a subdir, this is how it's specified
         * *kwargs* are additional keyword args to pass into the apply()
+        
+        Returns the SHA1 hash ID of the git commit of the project applied
         """
         pass
                                        
@@ -104,6 +107,8 @@ class Network(object):
         * *tag* is "1.0" or "1-latest", or None for just the latest version
         * *tempdir* is the parent dir to put the git clone dir; pass None for python to just choose
         * *kwargs* are additional args for the apply
+        
+        Returns the SHA1 hash ID of the git commit of the project applied
         """
         if tempdir:
             gitdir = os.path.join(tempdir, networkdir)
@@ -132,9 +137,8 @@ class Network(object):
                 self.checkProjectVersion(parentdir=tempdir, networkdir=networkdir,
                                          gitdir=gitdir, projectsubdir=projectsubdir)
 
-                self.applyProject(parentdir=tempdir, networkdir=networkdir,
-                                  gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
-                return
+                return self.applyProject(parentdir=tempdir, networkdir=networkdir,
+                                         gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
             
             elif not projectsubdir and os.path.exists(os.path.join(tempdir,networkdir)):
                 WranglerLogger.debug("Skipping checkout of %s, %s already exists" % 
@@ -144,9 +148,8 @@ class Network(object):
                                          gitdir=gitdir, projectsubdir=projectsubdir)
 
                 # TODO: we should verify we didn't require conflicting tags?
-                self.applyProject(parentdir=tempdir, networkdir=networkdir,
-                                  gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
-                return
+                return self.applyProject(parentdir=tempdir, networkdir=networkdir,
+                                         gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
         else:
             tempdir = tempfile.mkdtemp(prefix="Wrangler_tmp_", dir=".")
             WranglerLogger.debug("Using tempdir %s" % tempdir)
@@ -154,7 +157,7 @@ class Network(object):
         
         WranglerLogger.debug("Checking out networkdir %s into tempdir %s %s" %
                              (networkdir,tempdir,"for "+projectsubdir if projectsubdir else ""))
-        cmd = r"git clone -b master --quiet Y:\networks\%s" % networkdir
+        cmd = r"git clone -b master --quiet %s" % os.path.join(Network.NETWORK_PROJECTS_DIR, networkdir)
         (retcode, retstdout, retstderr) = self._runAndLog(cmd, tempdir)
         
         if retcode != 0:
@@ -167,7 +170,7 @@ class Network(object):
             if not os.path.exists(newtempdir):
                 os.makedirs(newtempdir)
 
-            cmd = r"git clone  -b master --quiet Y:\networks\%s\%s" % (networkdir, projectsubdir)
+            cmd = r"git clone  -b master --quiet %s" % os.path.join(Network.NETWORK_PROJECTS_DIR, networkdir, projectsubdir)
             (retcode, retstdout, retstderr) = self._runAndLog(cmd, newtempdir)
 
 
@@ -181,12 +184,12 @@ class Network(object):
         self.checkProjectVersion(parentdir=tempdir, networkdir=networkdir,
                                  gitdir=gitdir, projectsubdir=projectsubdir)
 
-        self.applyProject(parentdir=tempdir, networkdir=networkdir,
+        return self.applyProject(parentdir=tempdir, networkdir=networkdir,
                           gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
 
     def getCommit(self, gitdir):
         """
-        Figures out the commit string for the given gitdir (so gitdir is a git dir).
+        Figures out the SHA1 hash commit string for the given gitdir (so gitdir is a git dir).
         (e.g. a 40-character hex string)
         """
         cmd = r"git log -1"
@@ -210,25 +213,13 @@ class Network(object):
             return None
         return retstdout
 
-    def getNumericTag(self, gitdir, commitstr):
-        """
-        Figures out the numeric tag, returns it.
-        """
-        tags = self.getTags(gitdir, commitstr)
-        if not tags: return None
-
-        for tag in tags:
-            # require them to be 1.x(.x)
-            if re.match(tag_num_pattern, tag):
-                return tag
-        print None
-
     def logProject(self, gitdir, projectname, year=None, projectdesc=None, county=None):
         """
         Figures out the commit string and the tag.  Subclass should figure out the rest.
+        Returns the SHA1 hash ID of the git commit of the project applied
         """
         commitstr = self.getCommit(gitdir)
-        tag       = self.getNumericTag(gitdir, commitstr)
+        tag       = self.getTags(gitdir, commitstr)
 
         if year:
             yearstr = "%4d" % year
@@ -245,6 +236,8 @@ class Network(object):
                              )
                             )
         self.appliedProjects[projectname] = tag if tag else commitstr
+        
+        return commitstr
                 
     def write(self, path='.', name='network', writeEmptyFiles=True, suppressQuery=False, suppressValidation=False):
         """

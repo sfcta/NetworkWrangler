@@ -1,3 +1,4 @@
+import sys
 from .Linki import Linki
 from .Network import Network
 from .NetworkException import NetworkException
@@ -6,6 +7,7 @@ from .Supplink import Supplink
 try:
     from .TransitAssignmentData import TransitAssignmentData
 except:
+    print "Unexpected error:", sys.exc_info()
     from .transitAssignmentData import TransitAssignmentData
 from .TransitCapacity import TransitCapacity
 from .TransitLine import TransitLine

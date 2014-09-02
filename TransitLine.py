@@ -87,16 +87,50 @@ class TransitLine(object):
         self.currentStopIdx += 1
         return int(self.n[self.currentStopIdx-1].num)
 
-    def setFreqs(self, freqs):
-        """
-        Set all five headways (AM,MD,PM,EV,EA).  *freqs* must be a list of five strings.
-        """
-        if not len(freqs)==5: raise NetworkException('Must specify all 5 frequencies')
-        self.attr['FREQ[1]'] = freqs[0]
-        self.attr['FREQ[2]'] = freqs[1]
-        self.attr['FREQ[3]'] = freqs[2]
-        self.attr['FREQ[4]'] = freqs[3]
-        self.attr['FREQ[5]'] = freqs[4]
+    def setFreqs(self, freqs, timepers=None, allowDowngrades=True):
+        '''Set some or all five headways (AM,MD,PM,EV,EA)
+           - freqs is a list of numbers (or can be one number if only setting one headway)
+             also accepts list of strings of numbers e.g. ["8","0","8","0","0"]
+           - If setting fewer than 5 headways, timepers must specify the time period(s)
+             for which headways are being set. Can be numbers like [1,3] or strings like ['AM','PM'].
+             If setting all headways, True or 'All' may be passed.
+           - allowDowngrades (optional, pass either True or False) specifies whether headways
+             may be increased (i.e., whether service may be reduced) with the current action. 
+        '''
+        all_timepers = ['AM','MD','PM','EV','EA']
+        if timepers in (None, True, 'All', 'all', 'ALL'):
+            if not len(freqs)==5: raise NetworkException('Must specify all 5 frequencies or specify time periods to set')
+            num_freqs = 5
+            num_timepers = 5
+            timepers = all_timepers[:]
+        else:
+            try:
+                num_freqs = len(freqs)
+            except TypeError:   # only single number, not list, passed
+                num_freqs = 1
+                freqs = [freqs]
+            try:
+                num_timepers = len(timepers)
+            except TypeError:   # only single time period, not list, passed
+                num_timepers = 1
+                timepers = [timepers]
+            if num_freqs <> num_timepers: raise NetworkException('Specified ' + num_freqs + ' frequencies for ' + num_timepers + ' time periods')
+        for i in range(num_timepers):
+            timeper = timepers[i]
+            try:
+                timeper_int = int(timeper)  # time period may be number (1) or string ("1")
+                timepers[i] = all_timepers[timeper_int - 1]
+                timeper_idx = timeper_int
+            except ValueError:  # time period may be descriptive ("AM")
+                timeper = timeper.upper()
+                if timeper not in all_timepers: raise NetworkException('"' + timeper + '" is not a valid time period')
+                timeper_idx = 1 + all_timepers.index(timeper)
+            attr_set = 'FREQ[' + str(timeper_idx) + ']'
+            if(allowDowngrades):
+                self.attr[attr_set] = float(freqs[i])
+            else:
+                self.attr[attr_set] = min(float(freqs[i]),self.attr[attr_set])
+
         
     def getFreqs(self):
         """
@@ -124,6 +158,23 @@ class TransitLine(object):
         elif timeperiod=="EA":
             return float(self.attr["FREQ[5]"])
         raise NetworkException("getFreq() received invalid timeperiod "+str(timeperiod))
+
+    def hasService(self):
+        """
+        Returns true if any frequency is nonzero.
+        """
+        if self.getFreq("AM") != 0: return True
+        if self.getFreq("MD") != 0: return True
+        if self.getFreq("PM") != 0: return True
+        if self.getFreq("EV") != 0: return True
+        if self.getFreq("EA") != 0: return True
+        return False
+
+    def setOwner(self, newOwner):
+        """
+        Sets the owner for the transit line
+        """
+        self.attr["OWNER"] = str(newOwner)
 
     def getModeType(self):
         """
@@ -210,7 +261,33 @@ class TransitLine(object):
                 if hasA: return True
                 else: return False
         return False
-    
+
+    def hasSequence(self,list_of_node_ids):
+        """
+        Returns True iff the nodes indicated by list_of_node_ids appear in this line, in the exact specified order.
+        This method is stop-insenstive.
+        list_of_node_ids should be a list of positive integers, ordered by transit line path.
+        """
+        node_ids = self.listNodeIds()
+        for i in range(len(node_ids)):
+            if node_ids[i:i+len(list_of_node_ids)] == list_of_node_ids:
+                return True
+        return False
+
+    def listNodeIds(self,ignoreStops=True):
+        """
+        Returns a list of integers representing the node ids that appear along this line.
+        This method is stop-sensitive if called with ignoreStops=False.
+        """
+        node_ids = []
+        for node in self.n:
+            nodeNum = int(node.num)
+            if(ignoreStops):
+                nodeNum = abs(nodeNum)
+            node_ids.append(nodeNum)
+        return node_ids
+
+        
     def numStops(self):
         """
         Counts and returns the number of stops in the line.
@@ -240,7 +317,11 @@ class TransitLine(object):
         newNode = Node(newNodeNum)
         newNode.setStop(stop)
 
-        for nodeIdx in range(len(self.n)):
+        nodeIdx = 0
+        while True:
+            # out of nodes -- done
+            if nodeIdx >= len(self.n): return
+            
             currentNodeNum = abs(int(self.n[nodeIdx].num))
             if currentNodeNum == abs(refNodeNum):
                 if after==True:
@@ -249,6 +330,9 @@ class TransitLine(object):
                 else:
                     self.n.insert(nodeIdx,newNode)
                     WranglerLogger.debug("In line %s: inserted node %s before node %s" % (self.name,newNode.num,str(refNodeNum)))
+                nodeIdx += 1 # skip ahead one since we just added
+            
+            nodeIdx += 1
     
     def splitLink(self,nodeA,nodeB,newNodeNum,stop=False):
         """
@@ -296,20 +380,25 @@ class TransitLine(object):
         else:
             self.n[ind:] = newsection
     
-    def replaceSegment(self, node1, node2, newsection):
+    def replaceSegment(self, node1, node2, newsection, preserveStopStatus=False):
         """ Replaces the section from node1 to node2 with the newsection
             Newsection can be an array of numbers; this will make nodes.
+            preserveStopStatus means if node1 is a stop, make the replacement first node a stop, ditto for node2
         """
         WranglerLogger.debug("replacing segment " + str(node1) + " "+str(node2)+" with "+str(newsection)+" for "+self.name)
         try:
             ind1 = self.n.index(node1)
+            stop1 = True
         except:
             ind1 = self.n.index(-node1)
+            stop1 = False
             
         try:
             ind2 = self.n.index(node2)
+            stop2 = True
         except:
             ind2 = self.n.index(-node2)
+            stop2 = False
         
         attr1 = self.n[ind1].attr
         attr2 = self.n[ind2].attr
@@ -321,7 +410,48 @@ class TransitLine(object):
         newsection[0].attr=attr1
         newsection[-1].attr=attr2
         
+        if preserveStopStatus:
+            newsection[0].setStop(stop1)
+            newsection[-1].setStop(stop2)
+        
         self.n[ind1:ind2+1] = newsection
+
+    def replaceSequence(self, node_ids_to_replace, replacement_node_ids):
+        """
+        Replaces the sequence of nodes indicated by the positive integer list node_ids_to_replace
+        with the new sequence of nodes indicated by the positive integer list replacement_node_ids
+        This method removes stops from the replaced sequence; stops will have to be re-added.
+        Returns true iff the sequence is successfully replaced.
+        """
+        if self.hasSequence(node_ids_to_replace):
+            WranglerLogger.debug("replacing sequence " + str(node_ids_to_replace) + " with " + str(replacement_node_ids) + " for " + self.name)
+        else:
+            return False
+        node_ids = self.listNodeIds()
+        replaceNodesStartingAt = -1
+        for i in range(len(node_ids)):
+            if node_ids[i:i+len(node_ids_to_replace)] == node_ids_to_replace:
+                replaceNodesStartingAt = i
+                break
+        if replaceNodesStartingAt < 0:
+            WranglerLogger.debug("an unexpected error occurred in replaceSequence for " + self.name)
+            return False
+
+        attr1 = self.n[replaceNodesStartingAt].attr
+        attr2 = self.n[replaceNodesStartingAt+len(node_ids_to_replace)].attr
+        
+        # make the new nodes
+        replacement_nodes = list(replacement_node_ids) # copy this, we'll make them nodes
+        for i in range(len(replacement_nodes)):
+            if isinstance(replacement_nodes[i],int): replacement_nodes[i] = Node(replacement_nodes[i])
+            # they aren't stops
+            replacement_nodes[i].setStop(False)
+        # xfer the attributes
+        replacement_nodes[0].attr=attr1
+        replacement_nodes[-1].attr=attr2
+
+        self.n[replaceNodesStartingAt:replaceNodesStartingAt+len(node_ids_to_replace)] = replacement_nodes
+        return True
 
     def setStop(self, nodenum, isStop=True):
         """ 

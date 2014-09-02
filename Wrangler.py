@@ -114,14 +114,49 @@ class TransitLine(object):
         if template:
             self._applyTemplate(template)
 
-    def setFreqs(self, freqs):
-        '''Set all five headways (AM,MD,PM,EV,EA)'''
-        if not len(freqs)==5: raise NetworkException('Must specify all 5 frequencies')
-        self.attr['FREQ[1]'] = freqs[0]
-        self.attr['FREQ[2]'] = freqs[1]
-        self.attr['FREQ[3]'] = freqs[2]
-        self.attr['FREQ[4]'] = freqs[3]
-        self.attr['FREQ[5]'] = freqs[4]
+    def setFreqs(self, freqs, timepers=None, allowDowngrades=True):
+        '''Set some or all five headways (AM,MD,PM,EV,EA)
+           - freqs is a list of numbers (or can be one number if only setting one headway)
+             also accepts list of strings of numbers e.g. ["8","0","8","0","0"]
+           - If setting fewer than 5 headways, timepers must specify the time period(s)
+             for which headways are being set. Can be numbers like [1,3] or strings like ['AM','PM'].
+             If setting all headways, True or 'All' may be passed.
+           - allowDowngrades (optional, pass either True or False) specifies whether headways
+             may be increased (i.e., whether service may be reduced) with the current action. 
+        '''
+        all_timepers = ['AM','MD','PM','EV','EA']
+        if timepers in (None, True, 'All', 'all', 'ALL'):
+            if not len(freqs)==5: raise NetworkException('Must specify all 5 frequencies or specify time periods to set')
+            num_freqs = 5
+            num_timepers = 5
+            timepers = all_timepers[:]
+        else:
+            try:
+                num_freqs = len(freqs)
+            except TypeError:   # only single number, not list, passed
+                num_freqs = 1
+                freqs = [freqs]
+            try:
+                num_timepers = len(timepers)
+            except TypeError:   # only single time period, not list, passed
+                num_timepers = 1
+                timepers = [timepers]
+            if num_freqs <> num_timepers: raise NetworkException('Specified ' + num_freqs + ' frequencies for ' + num_timepers + ' time periods')
+        for i in range(num_timepers):
+            timeper = timepers[i]
+            try:
+                timeper_int = int(timeper)  # time period may be number (1) or string ("1")
+                timepers[i] = all_timepers[timeper_int - 1]
+                timeper_idx = timeper_int
+            except ValueError:  # time period may be descriptive ("AM")
+                timeper = timeper.upper()
+                if timeper not in all_timepers: raise NetworkException('"' + timeper + '" is not a valid time period')
+                timeper_idx = 1 + all_timepers.index(timeper)
+            attr_set = 'FREQ[' + timeper_idx + ']'
+            if(allowDowngrades):
+                self.attr[attr_set] = int(freqs[i])
+            else
+                self.attr[attr_set] = min(int(freqs[i]),self.attr[attr_set])
 
     def getFreqs(self):
         return [self.attr['FREQ[1]'],
