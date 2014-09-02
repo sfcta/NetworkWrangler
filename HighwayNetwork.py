@@ -31,7 +31,8 @@ class HighwayNetwork(Network):
         f.close()
         return HighwayNetwork.cube_hostnames
 
-    def __init__(self, champVersion, basenetworkpath, isTiered=False, tag=None,
+    def __init__(self, champVersion, basenetworkpath, networkBaseDir=None, networkProjectSubdir=None,
+                 networkSeedSubdir=None, networkPlanSubdir=None, isTiered=False, tag=None,
                  hwyspecsdir=None, hwyspecs=None, tempdir=None, networkName=None, tierNetworkName=None):
         """
         *basenetworkpath* should be a starting point for this network, and include a ``FREEFLOW.net``,
@@ -47,37 +48,19 @@ class HighwayNetwork(Network):
         *hwyspecs*, if passed in, should be an instance of :py:class:`HwySpecsRTP`.  It
         is only used for logging.
         """
-        Network.__init__(self, champVersion, networkName)
+        Network.__init__(self, champVersion, networkBaseDir, networkProjectSubdir, networkSeedSubdir,
+                         networkPlanSubdir, networkName)
         
         if isTiered:
             (head,tail) = os.path.split(basenetworkpath)
             self.applyBasenetwork(head,tail,None, tierNetworkName)
         else:
             self.applyingBasenetwork = True
-            self.cloneAndApplyProject(networkdir=basenetworkpath, tempdir=tempdir, tag=tag)
+            self.cloneAndApplyProject(networkdir=basenetworkpath,tempdir=tempdir, projtype='seed', tag=tag)
 
         # keep a reference of the hwyspecsrtp for logging
         self.hwyspecsdir = hwyspecsdir
         self.hwyspecs = hwyspecs
-
-    def getProjectVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
-        """        
-        Returns champVersion for this project
-
-        See :py:meth:`Wrangler.Network.applyProject` for argument details.
-        """
-        if projectsubdir:
-            champversionFilename = os.path.join(parentdir, networkdir, projectsubdir,"champVersion.txt")
-        else:
-            champversionFilename = os.path.join(parentdir, networkdir,"champVersion.txt")
-
-        try:
-            WranglerLogger.debug("Reading %s" % champversionFilename)
-            champVersion = open(champversionFilename,'r').read()
-            champVersion = champVersion.strip()
-        except:
-            champVersion = Network.CHAMP_VERSION_DEFAULT
-        return champVersion
         
     def applyBasenetwork(self, parentdir, networkdir, gitdir, tierNetworkName):
         
