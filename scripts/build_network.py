@@ -98,6 +98,8 @@ APPLIED_PROJECTS = None
 # OPTIONAL.  A list of project names.  For test mode, these projects won't use
 # the TAG.  This is meant for developing a network project.
 TEST_PROJECTS = None
+
+CHAMPVERSION = 4.3
 ###############################################################################
 
 if __name__ == '__main__':
@@ -180,7 +182,7 @@ if __name__ == '__main__':
     os.chdir(SCRATCH_SUBDIR)
     
     # Initialize networks
-    networks = {'hwy' :Wrangler.HighwayNetwork(champVersion="4.3",
+    networks = {'hwy' :Wrangler.HighwayNetwork(champVersion=CHAMPVERSION,
                                                basenetworkpath=os.path.join(PIVOT_DIR,"hwy") if PIVOT_DIR else "Roads2010",
                                                networkBaseDir=NETWORK_BASE_DIR,
                                                networkProjectSubdir=NETWORK_PROJECT_SUBDIR,
@@ -192,7 +194,7 @@ if __name__ == '__main__':
                                                hwyspecs=NONSF_PLANBAYAREA_SPECS,
                                                tempdir=TEMP_SUBDIR,
                                                networkName="hwy"),
-                'muni':Wrangler.TransitNetwork(champVersion="4.3",
+                'muni':Wrangler.TransitNetwork(champVersion=CHAMPVERSION,
                                                basenetworkpath=os.path.join(PIVOT_DIR,"trn") if PIVOT_DIR else None,
                                                networkBaseDir=NETWORK_BASE_DIR,
                                                networkProjectSubdir=NETWORK_PROJECT_SUBDIR,
@@ -200,7 +202,7 @@ if __name__ == '__main__':
                                                networkPlanSubdir=NETWORK_PLAN_SUBDIR,
                                                isTiered=True if PIVOT_DIR else False,
                                                networkName="muni"),
-                'rail':Wrangler.TransitNetwork(champVersion="4.3",
+                'rail':Wrangler.TransitNetwork(champVersion=CHAMPVERSION,
                                                basenetworkpath=os.path.join(PIVOT_DIR,"trn") if PIVOT_DIR else None,
                                                networkBaseDir=NETWORK_BASE_DIR,
                                                networkProjectSubdir=NETWORK_PROJECT_SUBDIR,
@@ -208,7 +210,7 @@ if __name__ == '__main__':
                                                networkPlanSubdir=NETWORK_PLAN_SUBDIR,
                                                isTiered=True if PIVOT_DIR else False,
                                                networkName="rail"),
-                'bus' :Wrangler.TransitNetwork(champVersion="4.3",
+                'bus' :Wrangler.TransitNetwork(champVersion=CHAMPVERSION,
                                                basenetworkpath=os.path.join(PIVOT_DIR,"trn") if PIVOT_DIR else None,
                                                networkBaseDir=NETWORK_BASE_DIR,
                                                networkProjectSubdir=NETWORK_PROJECT_SUBDIR,

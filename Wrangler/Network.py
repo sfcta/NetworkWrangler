@@ -7,7 +7,7 @@ __all__ = ['Network']
 
 class Network(object):
 
-    CHAMP_VERSION_DEFAULT   = "pre4.3"
+    CHAMP_VERSION_DEFAULT   = 4.3
     NETWORK_BASE_DIR        = r"Y:\networks"
     NETWORK_PROJECT_SUBDIR	= ""
     NETWORK_PLAN_SUBDIR     = ""
@@ -22,7 +22,7 @@ class Network(object):
         Currently this should be one of *pre4.3* and *4.3*
         Pass *networkName* to be added to the Networks dictionary
         """
-        if champVersion not in ["4.3", "pre4.3"]:
+        if type(champVersion) != type(0.0):
             raise NetworkException("Do not understand champVersion %s")
 
         self.champVersion = champVersion
@@ -83,7 +83,7 @@ class Network(object):
         projectdir = eval(evalstr)
         
         # WranglerLogger.debug("projectdir = " + str(projectdir))
-        pchampVersion = (eval("%s.champVersion()" % (projectname if not s_projectname else s_projectname)) if 'champVersion' in projectdir else Network.CHAMP_VERSION_DEFAULT)
+        pchampVersion = (eval("%s.champVersion()" % (projectname if not s_projectname else s_projectname)))
         return pchampVersion
     
     def checkProjectVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
@@ -99,20 +99,23 @@ class Network(object):
         WranglerLogger.debug("Checking champ version compatibility of project (%s) with requirement (%s)" % 
                              (projChampVersion, self.champVersion))
 
-        if self.champVersion == "pre4.3":
-            if projChampVersion == "pre4.3":
+        minChampVersion = projChampVersion[0]
+        maxChampVersion = projChampVersion[1]
+
+        if maxChampVersion == None:
+            if self.champVersion >= minChampVersion:
                 return
-            if projChampVersion == "4.3":
-                # See if there's a pre4.3 branch we can checkout
-                cmd = r"git checkout preCHAMP4.3"
-                (retcode, retstdout, retstderr) = self._runAndLog(cmd, gitdir)
-                if retcode != 0:
-                    raise NetworkException("Git checkout failed; see log file")
-        
-        if self.champVersion == "4.3":
-            if projChampVersion == "pre4.3":
-                raise NetworkException("Trying to use a pre4.3 network project (%s) to build a Champ4.3 network" % 
-                                       (networkdir if not projectsubdir else os.path.join(networkdir,projectsubdir)))
+        else:
+            if self.champVersion >= minChampVersion and self.champVersion <= maxChampVersion:
+                return
+
+        raise NetworkException("Project version range (%d, %d) not compatible with this CHAMP version %d" % (minChampVersion,maxChampVersion,self.champVersion))
+
+    def getWranglerVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
+        pass
+    
+    def checkWranglerVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
+        pass
 
     def getNetTypes(self, parentdir, networkdir, projectsubdir=None):
         """

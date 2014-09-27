@@ -12,7 +12,7 @@ class PlanSpecs:
         """
         self.projects = [] # list of projects included in the plan
         self.projectdict = {} # plan name => dictionary of attributes
-        self.network = Network(champVersion="4.3",
+        self.network = Network(champVersion=4.3,
                                networkBaseDir=basedir,
                                networkPlanSubdir=plansubdir,
                                networkProjectSubdir=projectsubdir)
