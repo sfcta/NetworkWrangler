@@ -265,7 +265,7 @@ if __name__ == '__main__':
 #---------------------------------------------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------------------------------
 
-
+    sys.exit()
 
     for netmode in ['hwy','muni', 'rail', 'bus']:
         
@@ -409,41 +409,41 @@ if __name__ == '__main__':
     Wrangler.TransitNetwork.capacity.writeTransitLineToVehicle(directory = trnpath)
     Wrangler.TransitNetwork.capacity.writeTransitPrefixToVehicle(directory = trnpath)
 
-# build transit report
-transit_freqs_by_line = {}  # line name => [freq_am,  freq_md,  freq_pm,  freq_ev,  freq_ea ] as strings
-transit_vtypes_by_line = {} # line name => (vtype_am, vtype_md, vtype_pm, vtype_ev, vtype_ea)
-for netmode in ['muni', 'rail', 'bus']:
-    for line in networks[netmode]:
-        transit_freqs_by_line[line.name] = line.getFreqs()
-        transit_vtypes_by_line[line.name] = (Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "AM")[1],
-                                             Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "MD")[1],
-                                             Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "PM")[1],
-                                             Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "EV")[1],
-                                             Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "EA")[1])
-# print it
-os.chdir("..")  # get out of the scratch subdir
-transit_report_filename = 'transitreport_%s_%s_%d%s_%s.csv' % \
-                        ("TEST" if BUILD_MODE=="test" else "", PROJECT, YEAR, SCENARIO, NOW)
-transit_report = open(transit_report_filename, 'w')
-transit_report.write("Source: %s\n" % transit_report_filename)
-transit_report.write(",Headways,,,,,,TransitVehicles\n")
-transit_report.write("Line Name,AM,MD,PM,EV,EA,,AM,MD,PM,EV,EA\n")
-for line_name in sorted(transit_freqs_by_line.keys()):
-    transit_report.write("%s,%s,%s,%s,%s,%s,,%s,%s,%s,%s,%s\n" %
-                         (line_name,
-                          transit_freqs_by_line[line_name][0],
-                          transit_freqs_by_line[line_name][1],
-                          transit_freqs_by_line[line_name][2],
-                          transit_freqs_by_line[line_name][3],
-                          transit_freqs_by_line[line_name][4],
-                          transit_vtypes_by_line[line_name][0],
-                          transit_vtypes_by_line[line_name][1],
-                          transit_vtypes_by_line[line_name][2],
-                          transit_vtypes_by_line[line_name][3],
-                          transit_vtypes_by_line[line_name][4]))
-transit_report.close()
-Wrangler.WranglerLogger.debug("Wrote transit report to %s" % transit_report_filename)
+    # build transit report
+    transit_freqs_by_line = {}  # line name => [freq_am,  freq_md,  freq_pm,  freq_ev,  freq_ea ] as strings
+    transit_vtypes_by_line = {} # line name => (vtype_am, vtype_md, vtype_pm, vtype_ev, vtype_ea)
+    for netmode in ['muni', 'rail', 'bus']:
+        for line in networks[netmode]:
+            transit_freqs_by_line[line.name] = line.getFreqs()
+            transit_vtypes_by_line[line.name] = (Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "AM")[1],
+                                                 Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "MD")[1],
+                                                 Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "PM")[1],
+                                                 Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "EV")[1],
+                                                 Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "EA")[1])
+    # print it
+    os.chdir("..")  # get out of the scratch subdir
+    transit_report_filename = 'transitreport_%s_%s_%d%s_%s.csv' % \
+                            ("TEST" if BUILD_MODE=="test" else "", PROJECT, YEAR, SCENARIO, NOW)
+    transit_report = open(transit_report_filename, 'w')
+    transit_report.write("Source: %s\n" % transit_report_filename)
+    transit_report.write(",Headways,,,,,,TransitVehicles\n")
+    transit_report.write("Line Name,AM,MD,PM,EV,EA,,AM,MD,PM,EV,EA\n")
+    for line_name in sorted(transit_freqs_by_line.keys()):
+        transit_report.write("%s,%s,%s,%s,%s,%s,,%s,%s,%s,%s,%s\n" %
+                             (line_name,
+                              transit_freqs_by_line[line_name][0],
+                              transit_freqs_by_line[line_name][1],
+                              transit_freqs_by_line[line_name][2],
+                              transit_freqs_by_line[line_name][3],
+                              transit_freqs_by_line[line_name][4],
+                              transit_vtypes_by_line[line_name][0],
+                              transit_vtypes_by_line[line_name][1],
+                              transit_vtypes_by_line[line_name][2],
+                              transit_vtypes_by_line[line_name][3],
+                              transit_vtypes_by_line[line_name][4]))
+    transit_report.close()
+    Wrangler.WranglerLogger.debug("Wrote transit report to %s" % transit_report_filename)
 
-# special!
-Wrangler.WranglerLogger.debug("Successfully completed running %s" % os.path.abspath(__file__))
-print "Remember to copy MissionLocalDelay.csv from the Muni_2011Oct dir!"
+    # special!
+    Wrangler.WranglerLogger.debug("Successfully completed running %s" % os.path.abspath(__file__))
+    print "Remember to copy MissionLocalDelay.csv from the Muni_2011Oct dir!"
