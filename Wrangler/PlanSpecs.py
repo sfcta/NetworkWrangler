@@ -40,15 +40,15 @@ class PlanSpecs:
                     assert(1==2)
 
                 # if project = "dir1/dir2" assume dir1 is git, dir2 is the projectsubdir
-##                (head,tail) = os.path.split(os.path.join(networkdir,project_name))
-##                if head:
-##                    applied_SHA1 = self.network.cloneProject(networkdir=head, projectsubdir=tail, tag=tag,
-##                                                                     projtype=projType, tempdir=tempdir)
-##                    self.projectdict[project_name]["nettypes"]=self.network.getNetTypes(tempdir,head,tail)
-##                else:
-##                    applied_SHA1 = self.network.cloneProject(networkdir=project_name, tag=tag,
-##                                                                     projtype=projType, tempdir=tempdir)
-##                    self.projectdict[project_name]["nettypes"]=self.network.getNetTypes(tempdir,project_name)
+                (head,tail) = os.path.split(os.path.join(networkdir,project_name))
+                if head:
+                    applied_SHA1 = self.network.cloneProject(networkdir=head, projectsubdir=tail, tag=tag,
+                                                                     projtype=projType, tempdir=tempdir)
+                    self.projectdict[project_name]["nettypes"]=self.network.getNetTypes(tempdir,head,tail)
+                else:
+                    applied_SHA1 = self.network.cloneProject(networkdir=project_name, tag=tag,
+                                                                     projtype=projType, tempdir=tempdir)
+                    self.projectdict[project_name]["nettypes"]=self.network.getNetTypes(tempdir,project_name)
 
     def projectAsDict(self,project_name):
         projDict = {}
