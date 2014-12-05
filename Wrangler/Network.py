@@ -56,6 +56,58 @@ class Network(object):
         return (retcode, retStdout, retStderr)
 
 
+    def getYear(self, parentdir, networkdir, gitdir, projectsubdir=None):
+        pass
+
+    def getDesc(self, parentdir, networkdir, gitdir, projectsubdir=None):
+        pass
+
+    def getPrereqs(self, parentdir, networkdir, gitdir, projectsubdir=None):
+        pass
+
+    def getCoreqs(self, parentdir, networkdir, gitdir, projectsubdir=None):
+        pass
+
+    def getConflicts(self, parentdir, networkdir, gitdir, projectsubdir=None):
+        pass
+
+    def getAttr(self, attr_name, parentdir, networkdir, gitdir, projectsubdir=None):
+        """        
+        Returns attribute for this project based on attr_name
+        attr_name: the name of the attribute to get
+        parentdir: the directory where the project is found
+        networkdir: the directory of the project within parentdir
+        gitdir: the checkout location of the network project
+        projectsubdir: the subdir if it exists, None otherwise
+        """
+
+        if attr_name not in ['year', 'desc', 'champVersion', 'wranglerVersion', 'prereqs', 'coreqs', 'conflicts', 'networks']:
+            WranglerLogger.fatal('%s is not a valid attribute type for a network project' % (attr_name))
+            return
+        
+        if projectsubdir:
+            projectname = projectsubdir
+            sys.path.append(os.path.join(os.getcwd(), parentdir, networkdir))
+        else:
+            projectname = networkdir
+            sys.path.append(os.path.join(os.getcwd(), parentdir))
+
+        try:
+            s_projectname = None
+            evalstr = "import %s" % projectname
+            exec(evalstr)
+        except Exception as e:
+            WranglerLogger.debug("error importing module")
+            s_projectname = "s"+str(projectname)
+            evalstr = "%s = __import__('%s')" % (s_projectname, projectname)
+            exec(evalstr)
+        evalstr = "dir(%s)" % (projectname if not s_projectname else s_projectname)
+        projectdir = eval(evalstr)
+        
+        # WranglerLogger.debug("projectdir = " + str(projectdir))
+        attr_value = (eval("%s.%s()" % ((projectname if not s_projectname else s_projectname),attr_name)))
+        return attr_value        
+    
     def getProjectVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
         """        
         Returns champVersion for this project
@@ -154,7 +206,114 @@ class Network(object):
         Returns the SHA1 hash ID of the git commit of the project applied
         """
         pass
-                                       
+
+
+    def cloneProject(self, networkdir, projectsubdir=None, tag=None, projtype=None, tempdir=None, **kwargs):
+        """
+        * *networkdir* corresponds to the dir relative to ``Y:\\networks``
+        * *projectsubdir* is a subdir within that, or None if there's no subdir
+        * *tag* is "1.0" or "1-latest", or None for just the latest version
+        * *tempdir* is the parent dir to put the git clone dir; pass None for python to just choose
+        * *kwargs* are additional args for the apply
+        
+        Returns the SHA1 hash ID of the git commit of the project applied
+        """
+        if tempdir:
+            #gitdir = os.path.join(tempdir, networkdir)
+
+            if projtype=='plan':
+                joinedBaseDir = os.path.join(Network.NETWORK_BASE_DIR,Network.NETWORK_PLAN_SUBDIR)
+                joinedTempDir = os.path.join(tempdir, Network.NETWORK_PLAN_SUBDIR)
+            elif projtype=='project':
+                joinedBaseDir = os.path.join(Network.NETWORK_BASE_DIR,Network.NETWORK_PROJECT_SUBDIR)
+                joinedTempDir = os.path.join(tempdir, Network.NETWORK_PROJECT_SUBDIR)
+            elif projtype=='seed':
+                joinedBaseDir = os.path.join(Network.NETWORK_BASE_DIR,Network.NETWORK_SEED_SUBDIR)
+                joinedTempDir = os.path.join(tempdir, Network.NETWORK_SEED_SUBDIR)
+            else:
+                joinedBaseDir = Network.NETWORK_BASE_DIR
+                joinedTempDir = tempdir
+                
+            gitdir = os.path.join(joinedTempDir, networkdir)
+            
+            if not os.path.exists(joinedTempDir):
+                os.makedirs(joinedTempDir)
+                
+            # if the tempdir exists and it's already here and the projectsubdir is present, 
+            # then we already checked it out
+            elif projectsubdir and os.path.exists(os.path.join(joinedTempDir,networkdir,projectsubdir)):
+                WranglerLogger.debug("Skipping checkout of %s, %s already exists" % 
+                                     (networkdir, os.path.join(joinedTempDir,networkdir,projectsubdir)))
+
+                 # verify we didn't require conflicting tags
+                try:
+                    commitstr = self.getCommit(gitdir)
+                except:
+                    gitdir = os.path.join(gitdir, projectsubdir)
+                    commitstr = self.getCommit(gitdir)
+
+                tags = self.getTags(gitdir, commitstr)
+                if tag and (not tags or tag not in tags):
+                    # TODO: just checkout to the new tag
+                    raise NetworkException("Conflicting tag requirements - FIXME!")
+
+                self.checkProjectVersion(parentdir=joinedTempDir, networkdir=networkdir,
+                                         gitdir=gitdir, projectsubdir=projectsubdir)
+                
+                return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
+                                         gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
+            
+            elif not projectsubdir and os.path.exists(os.path.join(joinedTempDir,networkdir)):
+                WranglerLogger.debug("Skipping checkout of %s, %s already exists" % 
+                                     (networkdir, os.path.join(joinedTempDir,networkdir)))
+
+                self.checkProjectVersion(parentdir=joinedTempDir, networkdir=networkdir,
+                                         gitdir=gitdir, projectsubdir=projectsubdir)
+
+                # TODO: we should verify we didn't require conflicting tags?
+                return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
+                                         gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
+        else:
+            # need if for projtype... and joinedTempDir
+            tempdir = tempfile.mkdtemp(prefix="Wrangler_tmp_", dir=".")
+            WranglerLogger.debug("Using tempdir %s" % tempdir)
+            gitdir = os.path.join(tempdir, networkdir)
+
+        WranglerLogger.debug("Checking out networkdir %s into tempdir %s %s" %
+                             (networkdir, joinedTempDir,"for "+projectsubdir if projectsubdir else ""))
+        cmd = r"git clone -b master --quiet %s" % os.path.join(joinedBaseDir, networkdir)
+        (retcode, retstdout, retstderr) = self._runAndLog(cmd, joinedTempDir)
+
+        if retcode != 0:
+            if not projectsubdir:
+                raise NetworkException("Git clone failed; see log file")
+
+            # if there was a subdir involved, try checking if the subdir is the git dir
+            gitdir = os.path.join(gitdir, projectsubdir)
+            newtempdir = os.path.join(joinedTempDir,networkdir)
+            if not os.path.exists(newtempdir):
+                os.makedirs(newtempdir)
+
+            cmd = r"git clone  -b master --quiet %s" % os.path.join(joinedBaseDir, networkdir, projectsubdir)
+            (retcode, retstdout, retstderr) = self._runAndLog(cmd, newtempdir)
+
+        if tag != None:
+            cmd = r"git checkout %s" % tag
+            print "cmd: %s" % cmd
+            print "gitdir: %s" % gitdir
+            (retcode, retstdout, retstderr) = self._runAndLog(cmd, gitdir)
+            if retcode != 0:
+                raise NetworkException("Git checkout failed; see log file")
+
+        self.checkProjectVersion(parentdir=joinedTempDir, networkdir=networkdir,
+                                 gitdir=gitdir, projectsubdir=projectsubdir)
+
+        return
+
+##        return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
+##                          gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
+
+
     def cloneAndApplyProject(self, networkdir, projectsubdir=None, tag=None, projtype=None, tempdir=None, **kwargs):
         """
         * *networkdir* corresponds to the dir relative to ``Y:\\networks``
