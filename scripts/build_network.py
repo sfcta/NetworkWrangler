@@ -220,6 +220,7 @@ if __name__ == '__main__':
                                                networkName="bus")
                 }
 
+    # For projects applied in a pivot network (because they won't show up in the current project list)
     if APPLIED_PROJECTS != None:
         for proj in APPLIED_PROJECTS:
             networks['hwy'].appliedProjects[proj]=TAG
@@ -229,7 +230,43 @@ if __name__ == '__main__':
     if not os.path.exists(hwypath): os.makedirs(hwypath)
     trnpath = os.path.join(OUT_DIR,TRN_SUBDIR)
     if not os.path.exists(trnpath): os.makedirs(trnpath)
-    
+
+#---------------------------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------------------------
+# ---------- New stuff here: iterate through network projects and build full network list.  Once list is build, then check out 
+# ---------- projects sequentially and check prereqs.
+#---------------------------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------------------------
+##    for netmode in ['hwy','muni','rail','bus']:
+##        #read/gather nework list
+##        Wrangler.WranglerLogger.info("Gathering network list for %s" % netmode)
+##
+##        for project in NETWORK_PROJECT[netmode]:
+##            projType    = 'project'
+##            tag         = TAG
+##            kwargs      = {}
+##            
+##            # Use project name, tags, kwargs from dictionary
+##            if type(project)==type({'this is':'a dictionary'}):
+##                project_name = project['name']
+##                if 'tag' in project:    tag = project['tag']
+##                if 'type' in project:   projType = project['type']
+##                if 'kwargs' in project: kwargs = project['kwargs']
+##
+##                
+##            # Use Project name directly
+##            elif type(project)==type("string"):
+##                project_name = project
+
+#---------------------------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------------------------
+# ---------- End new stuff
+# ---------- 
+#---------------------------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------------------------
+
+
+
     for netmode in ['hwy','muni', 'rail', 'bus']:
         
         # Build the networks!
@@ -275,7 +312,7 @@ if __name__ == '__main__':
                                                           tag=tag,
                                                           tempdir=TEMP_SUBDIR, **kwargs)
                 plan_project_list = PLAN_SPECS.listOfProjects(netmode)
-                NETWORK_PROJECTS[netmode].insert(NETWORK_PROJECTS[netmode].index(project)+1,plan_project_list)
+                ##NETWORK_PROJECTS[netmode].insert(NETWORK_PROJECTS[netmode].index(project)+1,plan_project_list)
                 i = NETWORK_PROJECTS[netmode].index(project) + 1
                 print "i-value: ", i
                 for p in plan_project_list:
