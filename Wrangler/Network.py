@@ -308,7 +308,8 @@ class Network(object):
         self.checkProjectVersion(parentdir=joinedTempDir, networkdir=networkdir,
                                  gitdir=gitdir, projectsubdir=projectsubdir)
 
-        return
+        commitstr = self.getCommit(gitdir)
+        return commitstr
 
 ##        return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
 ##                          gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)

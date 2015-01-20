@@ -234,7 +234,8 @@ if __name__ == '__main__':
 #---------------------------------------------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------------------------------
 # ---------- New stuff here: iterate through network projects and build full network list.  Once list is build, then check out 
-# ---------- projects sequentially and check prereqs.
+# ---------- projects sequentially and check prereqs.  This goes after networks are initialized because projects are checked-out
+# ---------- by networks.
 #---------------------------------------------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------------------------------
 ##    for netmode in ['hwy','muni','rail','bus']:
@@ -264,8 +265,6 @@ if __name__ == '__main__':
 # ---------- 
 #---------------------------------------------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------------------------------
-
-    sys.exit()
 
     for netmode in ['hwy','muni', 'rail', 'bus']:
         
@@ -312,7 +311,6 @@ if __name__ == '__main__':
                                                           tag=tag,
                                                           tempdir=TEMP_SUBDIR, **kwargs)
                 plan_project_list = PLAN_SPECS.listOfProjects(netmode)
-                ##NETWORK_PROJECTS[netmode].insert(NETWORK_PROJECTS[netmode].index(project)+1,plan_project_list)
                 i = NETWORK_PROJECTS[netmode].index(project) + 1
                 print "i-value: ", i
                 for p in plan_project_list:
@@ -330,12 +328,17 @@ if __name__ == '__main__':
             # if project = "dir1/dir2" assume dir1 is git, dir2 is the projectsubdir
             (head,tail) = os.path.split(project_name)
             if head:
-                applied_SHA1 = networks[netmode].cloneAndApplyProject(networkdir=head, projectsubdir=tail, tag=tag,
-                                                                      projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
+##                applied_SHA1 = networks[netmode].cloneAndApplyProject(networkdir=head, projectsubdir=tail, tag=tag,
+##                                                                      projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
+                applied_SHA1 = networks[netmode].cloneProject(networkdir=head, projectsubdir=tail, tag=tag,
+                                                              projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
             else:
-                applied_SHA1 = networks[netmode].cloneAndApplyProject(networkdir=project_name, tag=tag,
-                                                                      projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
-                
+##                applied_SHA1 = networks[netmode].cloneAndApplyProject(networkdir=project_name, tag=tag,
+##                                                                      projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
+                applied_SHA1 = networks[netmode].cloneProject(networkdir=project_name, tag=tag,
+                                                              projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
+
+            # get any 
             # find out if the applied project is behind HEAD
             # get the HEAD SHA1
             cmd = r"git show-ref --head master"
