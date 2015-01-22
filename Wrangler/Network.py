@@ -71,6 +71,39 @@ class Network(object):
     def getConflicts(self, parentdir, networkdir, gitdir, projectsubdir=None):
         pass
 
+    def getReqs(self, networkdir, projectsubdir=None, tag=None, projtype=None, tempdir=None):
+        (parentdir, networkdir, gitdir, projectsubdir) = self.parseProjArgs(networkdir, projectsubdir, projtype, tempdir)
+        prereqs     = self.getAttr('prereqs',parentdir, networkdir, gitdir, projectsubdir)
+        coreqs      = self.getAttr('coreqs',parentdir, networkdir, gitdir, projectsubdir)
+        conflicts   = self.getAttr('conflicts',parentdir, networkdir, gitdir, projectsubdir)
+        return (prereqs, coreqs, conflicts)
+
+    def parseProjArgs(self, networkdir, projectsubdir=None, projtype=None, tempdir=None):
+        if tempdir:
+            #gitdir = os.path.join(tempdir, networkdir)
+
+            if projtype=='plan':
+                joinedBaseDir = os.path.join(Network.NETWORK_BASE_DIR,Network.NETWORK_PLAN_SUBDIR)
+                joinedTempDir = os.path.join(tempdir, Network.NETWORK_PLAN_SUBDIR)
+            elif projtype=='project':
+                joinedBaseDir = os.path.join(Network.NETWORK_BASE_DIR,Network.NETWORK_PROJECT_SUBDIR)
+                joinedTempDir = os.path.join(tempdir, Network.NETWORK_PROJECT_SUBDIR)
+            elif projtype=='seed':
+                joinedBaseDir = os.path.join(Network.NETWORK_BASE_DIR,Network.NETWORK_SEED_SUBDIR)
+                joinedTempDir = os.path.join(tempdir, Network.NETWORK_SEED_SUBDIR)
+            else:
+                joinedBaseDir = Network.NETWORK_BASE_DIR
+                joinedTempDir = tempdir
+                
+            gitdir = os.path.join(joinedTempDir, networkdir)
+        else:
+            # need if for projtype... and joinedTempDir
+            tempdir = tempfile.mkdtemp(prefix="Wrangler_tmp_", dir=".")
+            joinedTempDir = tempdir
+            WranglerLogger.debug("Using tempdir %s" % tempdir)
+            gitdir = os.path.join(tempdir, networkdir)
+        return (joinedTempDir, networkdir, gitdir, projectsubdir)
+        
     def getAttr(self, attr_name, parentdir, networkdir, gitdir, projectsubdir=None):
         """        
         Returns attribute for this project based on attr_name
@@ -259,9 +292,12 @@ class Network(object):
 
                 self.checkProjectVersion(parentdir=joinedTempDir, networkdir=networkdir,
                                          gitdir=gitdir, projectsubdir=projectsubdir)
+
+                commitstr = self.getCommit(gitdir)
+                return commitstr
                 
-                return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
-                                         gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
+##                return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
+##                                         gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
             
             elif not projectsubdir and os.path.exists(os.path.join(joinedTempDir,networkdir)):
                 WranglerLogger.debug("Skipping checkout of %s, %s already exists" % 
@@ -271,8 +307,10 @@ class Network(object):
                                          gitdir=gitdir, projectsubdir=projectsubdir)
 
                 # TODO: we should verify we didn't require conflicting tags?
-                return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
-                                         gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
+                commitstr = self.getCommit(gitdir)
+                return commitstr
+##                return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
+##                                         gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
         else:
             # need if for projtype... and joinedTempDir
             tempdir = tempfile.mkdtemp(prefix="Wrangler_tmp_", dir=".")
