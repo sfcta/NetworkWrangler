@@ -130,9 +130,14 @@ def getProjectMatchLevel(left, right):
     #Wrangler.WranglerLogger.info("Match level %d for %s and %s" % (match, os.path.join(left_path,left_name), os.path.join(right_path,right_name)))
     return match
 
-def checkRequirements(REQUIREMENTS, PROJECTS, req_type='prereq'):
-    if req_type not in ('prereq','coreq','conflict'):
-        return None
+def checkRequirements(REQUIREMENTS, PROJECTS, req_type='prereq', mode='all'):
+    if req_type not in ('prereq','coreq','conflict') or mode not in ('any','all'):
+        return (None, None)
+
+    if mode=='all':
+        found = True
+    if mode=='any':
+        found = False
 
     for netmode in REQUIREMENTS.keys():
         for project in REQUIREMENTS[netmode].keys():
@@ -155,7 +160,7 @@ def checkRequirements(REQUIREMENTS, PROJECTS, req_type='prereq'):
                             if match_level > 0:
                                 match_record = {'name':os.path.join(path,name),'level':match_level,'net_type':n}
                                 match_records.append(match_record)
-                    CONFLICTS[netmode][project][req] = match_records
+                    REQUIREMENTS[netmode][project][req] = match_records
                 else:
                     for possible_match in PROJECTS[netmode][0:i+1]:
                         #Wrangler.WranglerLogger.info("comparing 'possible_match' %s to 'prereq' %s" % (possible_match,prereq))
@@ -181,7 +186,12 @@ def checkRequirements(REQUIREMENTS, PROJECTS, req_type='prereq'):
                                     match_record = {'name':os.path.join(path,name),'level':match_level,'net_type':n}
                                     match_records.append(match_record)
                         REQUIREMENTS[netmode][project][req] = match_records
-    return REQUIREMENTS
+                if mode == 'all' and REQUIREMENTS[netmode][project][req] == []:
+                    found = False
+                if mode == 'any' and REQUIREMENTS[netmode][project][req] != []:
+                    found = True
+                        
+    return (REQUIREMENTS, found)
 
 def writeRequirementsToFile(REQUIREMENTS,filename):
     report = open(filename,'w')    
@@ -219,12 +229,12 @@ def writeRequirementsToScreen(REQUIREMENTS, req_type='prereq'):
         print "PROJECT                TYPE   TYPE  PROJECT                LEVEL PROJECT MATCH          TYPE"
         print "---------------------- ------ ----- ---------------------- ----- ---------------------- ----"
         if REQUIREMENTS[net].keys() == []:
-            print "NO %sS FOUND" % print_req.upper()
+            print "NO %sS FOUND FOR %s NETWORK TYPE" % (print_req.upper(), net.upper())
             
         for proj in REQUIREMENTS[net].keys():
             for req in REQUIREMENTS[net][proj].keys():
                 line  = ""
-                line1 = "%-23s%-7s%-6s%-23s" %(proj[0:proj_name_max_width],req_type.upper(), net, req[0:proj_name_max_width])
+                line1 = "%-23s%-7s%-6s%-23s" %(proj[0:proj_name_max_width],req_type[0:6].upper(), net, req[0:proj_name_max_width])
                 line2 = "%-23s%-13s%-23s" % (proj[proj_name_max_width:],"",req[proj_name_max_width:])
                 
                 if REQUIREMENTS[net][proj][req] != []:
@@ -534,23 +544,44 @@ if __name__ == '__main__':
     cfFile = 'conflicts.csv'
 
     # Check prereqs
-    PRE_REQS = checkRequirements(PRE_REQS, NETWORK_PROJECTS, 'prereq')
+    (PRE_REQS, allPrereqsFound) = checkRequirements(PRE_REQS, NETWORK_PROJECTS, req_type='prereq', mode='all')
     writeRequirementsToFile(PRE_REQS,prFile)
     writeRequirementsToScreen(PRE_REQS, req_type='prereq')
+    if allPrereqsFound:
+        print 'All PRE-REQUISITES were found. Are the PRE-REQUISITES matches correct? (y/n)'
+    else:
+        print '!!!WARNING!!! Some PRE-REQUISITES were not found.  Continue anyway? (y/n)'
     response = raw_input("")
+    Wrangler.WranglerLogger.debug("  response = [%s]" % response)
+    if response.strip().lower() not in ["y", "yes"]:
+        sys.exit(2)
     
     # Check coreqs
-    CO_REQS = checkRequirements(CO_REQS, NETWORK_PROJECTS, 'coreq')
+    (CO_REQS, allCoreqsFound) = checkRequirements(CO_REQS, NETWORK_PROJECTS, req_type='coreq', mode='all')
     writeRequirementsToFile(CO_REQS,crFile)
     writeRequirementsToScreen(CO_REQS, req_type='coreq')
+    if allCoreqsFound:
+        print 'All CO-REQUISITES were found. Are the CO-REQUISITE matches correct? (y/n)'
+    else:
+        print '!!!WARNING!!! Some CO-REQUISITES were not found.  Continue anyway? (y/n)'
     response = raw_input("")
-    
+    Wrangler.WranglerLogger.debug("  response = [%s]" % response)
+    if response.strip().lower() not in ["y", "yes"]:
+        sys.exit(2)
+        
     # Check conflicts
-    CONFLICTS = checkRequirements(CONFLICTS, NETWORK_PROJECTS, 'conflict')
+    (CONFLICTS, anyConflictFound) = checkRequirements(CONFLICTS, NETWORK_PROJECTS, req_type='conflict', mode='any')
     writeRequirementsToFile(CONFLICTS,cfFile)
     writeRequirementsToScreen(CONFLICTS, 'conflict')
+    if anyConflictFound:
+        print '!!!WARNING!!! Conflicting projects were found.  Continue anyway? (y/n)'
+    else:
+        print 'No conflicting projects were found. Enter \'y\' to continue.'
     response = raw_input("")
-                    
+    Wrangler.WranglerLogger.debug("  response = [%s]" % response)
+    if response.strip().lower() not in ["y", "yes"]:
+        sys.exit(2)
+        
     # Network Loop #3: write the networks.
     for netmode in ['hwy','muni', 'rail', 'bus']:
         # Write the networks! 
