@@ -118,6 +118,7 @@ def getNetworkListIndex(project, networks):
     return None
 
 def getProjectMatchLevel(left, right):
+    Wrangler.WranglerLogger.info('checking for match between %s and %s' % (str(left), str(right)))
     (left_path,left_name)   = getProjectNameAndDir(left)
     (right_path,right_name) = getProjectNameAndDir(right)
     match = 0
@@ -125,9 +126,9 @@ def getProjectMatchLevel(left, right):
         match = 2
     elif left_name == right_name:
         match = 1
-    elif left_path == right_name or right_path == left_name:
-        match = 1
-    #Wrangler.WranglerLogger.info("Match level %d for %s and %s" % (match, os.path.join(left_path,left_name), os.path.join(right_path,right_name)))
+##    elif left_path == right_name or right_path == left_name:
+##        match = 1
+    Wrangler.WranglerLogger.info("Match level %d for %s and %s" % (match, os.path.join(left_path,left_name), os.path.join(right_path,right_name)))
     return match
 
 def checkRequirements(REQUIREMENTS, PROJECTS, req_type='prereq', mode='all'):
@@ -151,14 +152,18 @@ def checkRequirements(REQUIREMENTS, PROJECTS, req_type='prereq', mode='all'):
             for req in REQUIREMENTS[netmode][project]:
                 match_records = []
                 (path,name) = getProjectNameAndDir(req)
-                Wrangler.WranglerLogger.info('Checking %s %s for project %s using path\\name %s'
-                                             %(req_type, req, project, os.path.join(path,name)))
+##                Wrangler.WranglerLogger.info('Checking %s %s for project %s using path\\name %s'
+##                                             %(req_type, req, project, os.path.join(path,name)))
                 if req_type=='conflict':
                     for n in ['hwy','muni','bus','rail']:
                         for possible_match in PROJECTS[n]:
                             match_level = getProjectMatchLevel(possible_match, req)
                             if match_level > 0:
-                                match_record = {'name':os.path.join(path,name),'level':match_level,'net_type':n}
+                                (match_path,match_name) = getProjectNameAndDir(possible_match)
+                                Wrangler.WranglerLogger.debug("possible_match: %s, path: %s, name: %s, join: %s"
+                                                              % (str(possible_match), match_path, match_name,
+                                                                 os.path.join(match_path,match_name)))
+                                match_record = {'name':os.path.join(match_path,match_name),'level':match_level,'net_type':n}
                                 match_records.append(match_record)
                     REQUIREMENTS[netmode][project][req] = match_records
                 else:
@@ -166,7 +171,11 @@ def checkRequirements(REQUIREMENTS, PROJECTS, req_type='prereq', mode='all'):
                         #Wrangler.WranglerLogger.info("comparing 'possible_match' %s to 'prereq' %s" % (possible_match,prereq))
                         match_level = getProjectMatchLevel(possible_match, req)
                         if match_level > 0:
-                            match_record = {'name':os.path.join(path,name),'level':match_level,'net_type':netmode}
+                            (match_path,match_name) = getProjectNameAndDir(possible_match)
+                            Wrangler.WranglerLogger.debug("possible_match: %s, path: %s, name: %s, join: %s"
+                                                          % (str(possible_match), match_path, match_name,
+                                                             os.path.join(match_path,match_name)))
+                            match_record = {'name':os.path.join(match_path,match_name),'level':match_level,'net_type':netmode}
                             match_records.append(match_record)
                     REQUIREMENTS[netmode][project][req] = match_records
 
@@ -238,15 +247,20 @@ def writeRequirementsToScreen(REQUIREMENTS, req_type='prereq'):
                 line2 = "%-23s%-13s%-23s" % (proj[proj_name_max_width:],"",req[proj_name_max_width:])
                 
                 if REQUIREMENTS[net][proj][req] != []:
+                    i = 0
                     for match in REQUIREMENTS[net][proj][req]:
                         line1 = line1 + "%-6s%-23s%-4s" %(str(match['level']),
                                                           match['name'][0:proj_name_max_width],match['net_type'])
                         line2 = line2 + "%-6s%-23s%-4s" %("",
                                                           match['name'][proj_name_max_width:],"")
+
                         if not line2.isspace():
-                            line = line1 + '\n' + line2 + '\n'
+                            line = line + line1 + '\n' + line2 + '\n'
                         else:
-                            line = line1 + '\n'
+                            line = line + line1 + '\n'
+                          
+                        line1 = "%-59s" % ""
+                        line2 = "%-59s" % ""
                 else:
                     line = line1 + "%-6s%-23s%-4s\n" %("NA","MISSING","NA")
                 print line
@@ -389,7 +403,7 @@ if __name__ == '__main__':
     # project list so we can check pre-reqs, etc, in loop #2.
     for netmode in ['hwy','muni', 'rail', 'bus']:
         # Build the networks!
-        Wrangler.WranglerLogger.info("Building %s networks" % netmode)
+        Wrangler.WranglerLogger.info("Checking out %s networks" % netmode)
         appliedcount = 0
         for project in NETWORK_PROJECTS[netmode]:
             
@@ -448,15 +462,11 @@ if __name__ == '__main__':
             # if project = "dir1/dir2" assume dir1 is git, dir2 is the projectsubdir
             (head,tail) = os.path.split(project_name)
             if head:
-##                applied_SHA1 = networks[netmode].cloneAndApplyProject(networkdir=head, projectsubdir=tail, tag=tag,
-##                                                                      projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
                 applied_SHA1 = networks[netmode].cloneProject(networkdir=head, projectsubdir=tail, tag=tag,
                                                               projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
                 (prereqs, coreqs, conflicts) = networks[netmode].getReqs(networkdir=head, projectsubdir=tail, tag=tag,
                                                                          projtype=projType, tempdir=TEMP_SUBDIR)
             else:
-##                applied_SHA1 = networks[netmode].cloneAndApplyProject(networkdir=project_name, tag=tag,
-##                                                                      projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
                 applied_SHA1 = networks[netmode].cloneProject(networkdir=project_name, tag=tag,
                                                               projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
                 (prereqs, coreqs, conflicts) = networks[netmode].getReqs(networkdir=project_name, projectsubdir=tail, tag=tag,
@@ -537,8 +547,7 @@ if __name__ == '__main__':
                 for conflict in conflicts:
                     CONFLICTS[netmode][project_name][conflict] = None
 
-    # Network Loop #2: check pre-reqs, co-reqs, conflicts. Build networks if everything's cool.
-    
+    # Check requirements
     prFile = 'prereqs.csv'
     crFile = 'coreqs.csv'
     cfFile = 'conflicts.csv'
@@ -581,7 +590,73 @@ if __name__ == '__main__':
     Wrangler.WranglerLogger.debug("  response = [%s]" % response)
     if response.strip().lower() not in ["y", "yes"]:
         sys.exit(2)
-        
+
+    # Network Loop #2: Now that everything has been checked, build the networks.
+    for netmode in ['hwy','muni', 'rail', 'bus']:
+        Wrangler.WranglerLogger.info("Building %s networks" % netmode)
+        appliedcount = 0
+        for project in NETWORK_PROJECTS[netmode]:
+            # Start with TAG if not build mode, no kwargs
+            projType = 'project'
+            tag    = TAG
+            kwargs = {}
+
+            # Use project name, tags, kwargs from dictionary
+            if type(project)==type({'this is':'a dictionary'}):
+                project_name = project['name']
+                if 'tag' in project:    tag = project['tag']
+                if 'type' in project:   projType = project['type']
+                if 'kwargs' in project: kwargs = project['kwargs']
+                
+            # Use Project name directly
+            elif type(project)==type("string"):
+                project_name = project
+
+            if projType=='plan':
+                continue
+
+            # test mode - don't use TAG for TEST_PROJECTS
+            if BUILD_MODE=="test" and type(TEST_PROJECTS)==type(['List']):
+                if project_name in TEST_PROJECTS:
+                    Wrangler.WranglerLogger.debug("Skipping tag [%s] because test mode and [%s] is in TEST_PROJECTS" % 
+                                                  (TAG, project_name))
+                    tag = None
+                    
+            Wrangler.WranglerLogger.debug("Project name = %s" % project_name)
+            try:
+                applied_SHA1 = None 
+                # if project = "dir1/dir2" assume dir1 is git, dir2 is the projectsubdir
+                #breaks for hwy projects w/ subdirs
+##                (head,tail) = os.path.split(project_name)
+##                if head:
+##                    (parentdir, networkdir, gitdir, projectsubdir) = networks[netmode].parseProjArgs(networkdir=head, projectsubdir=tail,
+##                                                                                                     projtype=projType,
+##                                                                                                     tempdir=TEMP_SUBDIR)
+##                    applied_SHA1 = networks[netmode].applyProject(parentdir, networkdir, gitdir, projectsubdir, **kwargs)
+##                else:
+##                    (parentdir, networkdir, gitdir, projectsubdir) = networks[netmode].parseProjArgs(networkdir=project_name, 
+##                                                                                                     projtype=projType,
+##                                                                                                     tempdir=TEMP_SUBDIR)
+##                    applied_SHA1 = networks[netmode].applyProject(parentdir, networkdir, gitdir, projectsubdir, **kwargs)
+                #breaks for trn projects w/ subdirs
+##                (parentdir, networkdir, gitdir, projectsubdir) = networks[netmode].parseProjArgs(networkdir=project_name, 
+##                                                                                                 projtype=projType,
+##                                                                                                 tempdir=TEMP_SUBDIR)
+##                applied_SHA1 = networks[netmode].applyProject(parentdir, networkdir, gitdir, projectsubdir, **kwargs)
+                # just trying the regular ol' way.  Log will be messy with all skipping of cloning.
+                (head,tail) = os.path.split(project_name)
+                if head:
+                    applied_SHA1 = networks[netmode].cloneAndApplyProject(networkdir=head, projectsubdir=tail, tag=tag,
+                                                                          projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
+                else:
+                    applied_SHA1 = networks[netmode].cloneAndApplyProject(networkdir=project_name, tag=tag,
+                                                                          projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
+                appliedcount += 1
+            except Exception as e:
+                Wrangler.WranglerLogger.debug(e)
+                response = raw_input("")
+
+
     # Network Loop #3: write the networks.
     for netmode in ['hwy','muni', 'rail', 'bus']:
         # Write the networks! 
