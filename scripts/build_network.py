@@ -100,6 +100,7 @@ APPLIED_PROJECTS = None
 TEST_PROJECTS = None
 
 CHAMPVERSION = 4.3
+CHAMP_NODE_NAMES = 'Y:\champ\util\nodes.xls'
 ###############################################################################
 
 def getProjectNameAndDir(project):
@@ -269,6 +270,7 @@ def writeRequirementsToScreen(REQUIREMENTS, req_type='prereq'):
 if __name__ == '__main__':
     optlist,args    = getopt.getopt(sys.argv[1:],'c:m:')
     NOW = time.strftime("%Y%b%d.%H%M%S")
+    os.environ['CHAMP_NODE_NAMES'] = CHAMP_NODE_NAMES
     
     if len(args) < 1:
         print USAGE
