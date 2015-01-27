@@ -130,7 +130,7 @@ class Network(object):
             evalstr = "import %s" % projectname
             exec(evalstr)
         except Exception as e:
-            WranglerLogger.debug("error importing module")
+            #WranglerLogger.debug("error importing module")
             s_projectname = "s"+str(projectname)
             evalstr = "%s = __import__('%s')" % (s_projectname, projectname)
             exec(evalstr)
@@ -160,7 +160,7 @@ class Network(object):
             evalstr = "import %s" % projectname
             exec(evalstr)
         except Exception as e:
-            WranglerLogger.debug("error importing module")
+            #WranglerLogger.debug("error importing module")
             s_projectname = "s"+str(projectname)
             evalstr = "%s = __import__('%s')" % (s_projectname, projectname)
             exec(evalstr)
@@ -214,14 +214,22 @@ class Network(object):
         else:
             projectname = networkdir
             sys.path.append(os.path.join(os.getcwd(), parentdir))
-        
-        evalstr = "import %s" % projectname
-        exec(evalstr)
-        evalstr = "dir(%s)" % projectname
+
+        try:
+            s_projectname = None
+            evalstr = "import %s" % projectname
+            exec(evalstr)
+        except Exception as e:
+            #WranglerLogger.debug("error importing module")
+            s_projectname = "s"+str(projectname)
+            evalstr = "%s = __import__('%s')" % (s_projectname, projectname)
+            exec(evalstr)
+
+        evalstr = "dir(%s)" % (projectname if not s_projectname else s_projectname)
         projectdir = eval(evalstr)
         
         # WranglerLogger.debug("projectdir = " + str(projectdir))
-        netTypes = (eval("%s.networks()" % projectname))
+        netTypes = (eval("%s.networks()" % (projectname if not s_projectname else s_projectname)))
         return netTypes
         
     def applyProject(self, parentdir, networkdir, gitdir, projectsubdir=None, **kwargs):
