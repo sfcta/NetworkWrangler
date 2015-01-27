@@ -99,8 +99,8 @@ APPLIED_PROJECTS = None
 # the TAG.  This is meant for developing a network project.
 TEST_PROJECTS = None
 
-CHAMPVERSION = 4.3
-CHAMP_NODE_NAMES = 'Y:\champ\util\nodes.xls'
+CHAMPVERSION = 5.0
+CHAMP_NODE_NAMES = r'Y:\champ\util\nodes.xls'
 ###############################################################################
 
 def getProjectNameAndDir(project):
