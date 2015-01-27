@@ -38,9 +38,9 @@ class PlanSpecs:
                 else:
                     print "kwargs not coming through.", kwargs
                     assert(1==2)
-
+                    
                 # if project = "dir1/dir2" assume dir1 is git, dir2 is the projectsubdir
-                (head,tail) = os.path.split(os.path.join(networkdir,project_name))
+                (head,tail) = os.path.split(project_name)
                 if head:
                     applied_SHA1 = self.network.cloneProject(networkdir=head, projectsubdir=tail, tag=tag,
                                                                      projtype=projType, tempdir=tempdir)
@@ -68,8 +68,8 @@ class PlanSpecs:
 
         for proj in self.projects:
             if netType in self.projectdict[proj]['nettypes']:
-                print "proj: ", proj
-                print "projAsDict: ", self.projectAsDict(proj)
+##                print "proj: ", proj
+##                print "projAsDict: ", self.projectAsDict(proj)
                 projectlist.append(self.projectAsDict(proj))
         return projectlist
         

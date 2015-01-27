@@ -437,11 +437,7 @@ if __name__ == '__main__':
                 i = NETWORK_PROJECTS[netmode].index(project) + 1
                 print "i-value: ", i
                 for p in plan_project_list:
-                    if type(p) is dict:
-                        p['name'] = os.path.join(project_name,p['name'])
-                        NETWORK_PROJECTS[netmode].insert(i, p)
-                    else:
-                        NETWORK_PROJECTS[netmode].insert(i, os.path.join(project_name,p))
+                    NETWORK_PROJECTS[netmode].insert(i, p)
                     i+=1
                 continue
 
