@@ -10,14 +10,17 @@ class PlanSpecs:
         """
         Read specs file, check out projects and check the network type and project year
         """
-        self.projects = [] # list of projects included in the plan
-        self.projectdict = {} # plan name => dictionary of attributes
-        self.network = Network(champVersion=4.3,
-                               networkBaseDir=basedir,
-                               networkPlanSubdir=plansubdir,
-                               networkProjectSubdir=projectsubdir)
+        self.projects           = [] # list of projects included in the plan
+        self.projectdict        = {} # plan name => dictionary of attributes
+        #network is necessary to check out projects
+        self.network            = Network(champVersion=4.3,
+                                          networkBaseDir=basedir,
+                                          networkPlanSubdir=plansubdir,
+                                          networkProjectSubdir=projectsubdir)
+        self.plan_tag           = None
+        self.override           = []
         
-        specs = open(os.path.join(basedir,plansubdir,networkdir,'planSpecs.csv'),'r')
+        specs = open(os.path.join(tempdir,plansubdir,networkdir,'planSpecs.csv'),'r')
         i=0
         for line in specs:
             i+=1
@@ -35,6 +38,10 @@ class PlanSpecs:
                 self.projectdict[project_name]["projtype"]=projType
                 if kwargs:
                     self.projectdict[project_name]["kwargs"]=kwargs
+                    if 'plan_tag' in kwargs.keys():
+                        plan_tag = kwargs['plan_tag']
+                    if 'override' in kwargs.keys():
+                        override = kwargs['override'] 
                 else:
                     print "kwargs not coming through.", kwargs
                     assert(1==2)
