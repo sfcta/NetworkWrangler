@@ -423,24 +423,6 @@ if __name__ == '__main__':
                                                   (TAG, project_name))
                     tag = None                   
 
-            print "Checking projType... %s" % projType
-            if projType=='plan':
-                #Open specs file and get list of projects
-                specFile = os.path.join(project_name,'planSpecs.csv')
-                PLAN_SPECS = Wrangler.PlanSpecs.PlanSpecs(basedir=Wrangler.Network.NETWORK_BASE_DIR,
-                                                          networkdir=project_name,
-                                                          plansubdir=Wrangler.Network.NETWORK_PLAN_SUBDIR,
-                                                          projectsubdir=Wrangler.Network.NETWORK_PROJECT_SUBDIR,
-                                                          tag=tag,
-                                                          tempdir=TEMP_SUBDIR, **kwargs)
-                plan_project_list = PLAN_SPECS.listOfProjects(netmode)
-                i = NETWORK_PROJECTS[netmode].index(project) + 1
-                print "i-value: ", i
-                for p in plan_project_list:
-                    NETWORK_PROJECTS[netmode].insert(i, p)
-                    i+=1
-                continue
-
             Wrangler.WranglerLogger.debug("Project name = %s" % project_name)
 
             applied_SHA1 = None 
@@ -455,7 +437,27 @@ if __name__ == '__main__':
                 applied_SHA1 = networks[netmode].cloneProject(networkdir=project_name, tag=tag,
                                                               projtype=projType, tempdir=TEMP_SUBDIR, **kwargs)
                 (prereqs, coreqs, conflicts) = networks[netmode].getReqs(networkdir=project_name, projectsubdir=tail, tag=tag,
-                                                                         projtype=projType, tempdir=TEMP_SUBDIR)
+                                                                         projtype=projType, tempdir=TEMP_SUBDIR)                
+
+            print "Checking projType... %s" % projType
+            if projType=='plan':
+                #Open specs file and get list of projects
+                specFile = os.path.join(TEMP_SUBDIR,NETWORK_PLAN_SUBDIR,'planSpecs.csv')
+                PLAN_SPECS = Wrangler.PlanSpecs.PlanSpecs(basedir=Wrangler.Network.NETWORK_BASE_DIR,
+                                                          networkdir=project_name,
+                                                          plansubdir=Wrangler.Network.NETWORK_PLAN_SUBDIR,
+                                                          projectsubdir=Wrangler.Network.NETWORK_PROJECT_SUBDIR,
+                                                          tag=tag,
+                                                          tempdir=TEMP_SUBDIR, **kwargs)
+                plan_project_list = PLAN_SPECS.listOfProjects(netmode)
+                i = NETWORK_PROJECTS[netmode].index(project) + 1
+                print "i-value: ", i
+                for p in plan_project_list:
+                    NETWORK_PROJECTS[netmode].insert(i, p)
+                    i+=1
+                continue
+
+
 
             # get any 
             # find out if the applied project is behind HEAD
