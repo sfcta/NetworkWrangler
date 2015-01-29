@@ -55,22 +55,6 @@ class Network(object):
         WranglerLogger.debug("Received %d from [%s] run in [%s]" % (retcode, cmd, run_dir))
         return (retcode, retStdout, retStderr)
 
-
-    def getYear(self, parentdir, networkdir, gitdir, projectsubdir=None):
-        pass
-
-    def getDesc(self, parentdir, networkdir, gitdir, projectsubdir=None):
-        pass
-
-    def getPrereqs(self, parentdir, networkdir, gitdir, projectsubdir=None):
-        pass
-
-    def getCoreqs(self, parentdir, networkdir, gitdir, projectsubdir=None):
-        pass
-
-    def getConflicts(self, parentdir, networkdir, gitdir, projectsubdir=None):
-        pass
-
     def getReqs(self, networkdir, projectsubdir=None, tag=None, projtype=None, tempdir=None):
         (parentdir, networkdir, gitdir, projectsubdir) = self.parseProjArgs(networkdir, projectsubdir, projtype, tempdir)
         prereqs     = self.getAttr('prereqs',parentdir, networkdir, gitdir, projectsubdir)
@@ -196,12 +180,6 @@ class Network(object):
 
         raise NetworkException("Project version range (%d, %d) not compatible with this CHAMP version %d" % (minChampVersion,maxChampVersion,self.champVersion))
 
-    def getWranglerVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
-        pass
-    
-    def checkWranglerVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
-        pass
-
     def getNetTypes(self, parentdir, networkdir, projectsubdir=None):
         """
         Gets a list of network types for this project
@@ -303,9 +281,6 @@ class Network(object):
 
                 commitstr = self.getCommit(gitdir)
                 return commitstr
-                
-##                return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
-##                                         gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
             
             elif not projectsubdir and os.path.exists(os.path.join(joinedTempDir,networkdir)):
                 WranglerLogger.debug("Skipping checkout of %s, %s already exists" % 
@@ -317,8 +292,7 @@ class Network(object):
                 # TODO: we should verify we didn't require conflicting tags?
                 commitstr = self.getCommit(gitdir)
                 return commitstr
-##                return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
-##                                         gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
+
         else:
             # need if for projtype... and joinedTempDir
             tempdir = tempfile.mkdtemp(prefix="Wrangler_tmp_", dir=".")
@@ -356,10 +330,6 @@ class Network(object):
 
         commitstr = self.getCommit(gitdir)
         return commitstr
-
-##        return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
-##                          gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
-
 
     def cloneAndApplyProject(self, networkdir, projectsubdir=None, tag=None, projtype=None, tempdir=None, **kwargs):
         """
