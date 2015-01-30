@@ -7,7 +7,7 @@ __all__ = ['Network']
 
 class Network(object):
 
-    CHAMP_VERSION_DEFAULT   = 4.3
+    WRANGLER_VERSION        = 2.0
     NETWORK_BASE_DIR        = r"Y:\networks"
     NETWORK_PROJECT_SUBDIR	= ""
     NETWORK_PLAN_SUBDIR     = ""
@@ -19,13 +19,14 @@ class Network(object):
                  networkSeedSubdir=None, networkPlanSubdir=None, networkName=None):
         """
         *champVersion* argument is for compatibility check.
-        Currently this should be one of *pre4.3* and *4.3*
+        Currently this should be 4.3 or newer.
         Pass *networkName* to be added to the Networks dictionary
         """
         if type(champVersion) != type(0.0):
             raise NetworkException("Do not understand champVersion %s")
 
         self.champVersion = champVersion
+        self.wranglerVersion = self.WRANGLER_VERSION
         self.appliedProjects = {}
         if networkBaseDir: Network.NETWORK_BASE_DIR = networkBaseDir
         if networkProjectSubdir: Network.NETWORK_PROJECT_SUBDIR = networkProjectSubdir
@@ -125,60 +126,50 @@ class Network(object):
         attr_value = (eval("%s.%s()" % ((projectname if not s_projectname else s_projectname),attr_name)))
         return attr_value        
     
-    def getProjectVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
+    def getChampVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
         """        
-        Returns champVersion for this project
+        Returns champVersion range for this project
 
         See :py:meth:`Wrangler.Network.applyProject` for argument details.
         """
-        if projectsubdir:
-            projectname = projectsubdir
-            sys.path.append(os.path.join(os.getcwd(), parentdir, networkdir))
+        return getAttr('champVersion',parentdir, networkdir,gitdir, projectsubdir)
 
-        else:
-            projectname = networkdir
-            sys.path.append(os.path.join(os.getcwd(), parentdir))
+    def getWranglerVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
+        """        
+        Returns wranglerVersion range for this project
 
-        try:
-            s_projectname = None
-            evalstr = "import %s" % projectname
-            exec(evalstr)
-        except Exception as e:
-            #WranglerLogger.debug("error importing module")
-            s_projectname = "s"+str(projectname)
-            evalstr = "%s = __import__('%s')" % (s_projectname, projectname)
-            exec(evalstr)
-        evalstr = "dir(%s)" % (projectname if not s_projectname else s_projectname)
-        projectdir = eval(evalstr)
-        
-        # WranglerLogger.debug("projectdir = " + str(projectdir))
-        pchampVersion = (eval("%s.champVersion()" % (projectname if not s_projectname else s_projectname)))
-        return pchampVersion
-    
-    def checkProjectVersion(self, parentdir, networkdir, gitdir, projectsubdir=None):
+        See :py:meth:`Wrangler.Network.applyProject` for argument details.
         """
-        Verifies that this project is compatible with the champVersion, raises an exception
+        return getAttr('wranglerVersion',parentdir, networkdir,gitdir, projectsubdir)
+    
+    def checkVersion(self, version, parentdir, networkdir, gitdir, projectsubdir=None):
+        """
+        Verifies that this project is compatible with the champVersion or wranglerVersion, raises an exception
           if not
 
         See :py:meth:`Wrangler.Network.applyProject` for argument details.
         """
-        # the subclass figures out what champVersion this project is
-        projChampVersion = self.getProjectVersion(parentdir=parentdir, networkdir=networkdir,
-                                                  gitdir=gitdir, projectsubdir=projectsubdir)
-        WranglerLogger.debug("Checking champ version compatibility of project (%s) with requirement (%s)" % 
-                             (projChampVersion, self.champVersion))
+        if version not in ['champVersion','wranglerVersion']:
+            Wrangler.WranglerLogger.fatal("%s is not a valid version.  Must be 'champVersion' or 'wranglerVersion'" % str(version))
 
-        minChampVersion = projChampVersion[0]
-        maxChampVersion = projChampVersion[1]
+        versions = {'champVersion':self.champVersion, 'wranglerVersion':self.wranglerVersion}        
+        projVersion = self.getAttr(version, parentdir=parentdir, networkdir=networkdir,
+                                   gitdir=gitdir, projectsubdir=projectsubdir)
+        WranglerLogger.debug("Checking %s compatibility of project (%s) with requirement (%s)" % 
+                             (version, projVersion, versions[version]))
 
-        if maxChampVersion == None:
-            if self.champVersion >= minChampVersion:
+        minVersion = projVersion[0]
+        maxVersion = projVersion[1]
+        
+        if maxVersion == None:
+            if versions[version] >= minVersion:
                 return
         else:
-            if self.champVersion >= minChampVersion and self.champVersion <= maxChampVersion:
+            if versions[version] >= minVersion and versions[version] <= maxVersion:
                 return
 
-        raise NetworkException("Project version range (%d, %d) not compatible with this CHAMP version %d" % (minChampVersion,maxChampVersion,self.champVersion))
+        raise NetworkException("Project version range (%d, %d) not compatible with this %s version %d"
+                               % (minVersion,maxVersion,version.replace("Version","").upper(),versions[version]))
 
     def getNetTypes(self, parentdir, networkdir, projectsubdir=None):
         """
@@ -276,7 +267,7 @@ class Network(object):
                     # TODO: just checkout to the new tag
                     raise NetworkException("Conflicting tag requirements - FIXME!")
 
-                self.checkProjectVersion(parentdir=joinedTempDir, networkdir=networkdir,
+                self.checkVersion(version='champVersion',parentdir=joinedTempDir, networkdir=networkdir,
                                          gitdir=gitdir, projectsubdir=projectsubdir)
 
                 commitstr = self.getCommit(gitdir)
@@ -286,7 +277,7 @@ class Network(object):
                 WranglerLogger.debug("Skipping checkout of %s, %s already exists" % 
                                      (networkdir, os.path.join(joinedTempDir,networkdir)))
 
-                self.checkProjectVersion(parentdir=joinedTempDir, networkdir=networkdir,
+                self.checkVersion(version='champVersion',parentdir=joinedTempDir, networkdir=networkdir,
                                          gitdir=gitdir, projectsubdir=projectsubdir)
 
                 # TODO: we should verify we didn't require conflicting tags?
@@ -325,7 +316,7 @@ class Network(object):
             if retcode != 0:
                 raise NetworkException("Git checkout failed; see log file")
 
-        self.checkProjectVersion(parentdir=joinedTempDir, networkdir=networkdir,
+        self.checkVersion(version='champVersion',parentdir=joinedTempDir, networkdir=networkdir,
                                  gitdir=gitdir, projectsubdir=projectsubdir)
 
         commitstr = self.getCommit(gitdir)
@@ -380,7 +371,7 @@ class Network(object):
                     # TODO: just checkout to the new tag
                     raise NetworkException("Conflicting tag requirements - FIXME!")
 
-                self.checkProjectVersion(parentdir=joinedTempDir, networkdir=networkdir,
+                self.checkVersion(version='champVersion',parentdir=joinedTempDir, networkdir=networkdir,
                                          gitdir=gitdir, projectsubdir=projectsubdir)
                 
                 return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
@@ -390,7 +381,7 @@ class Network(object):
                 WranglerLogger.debug("Skipping checkout of %s, %s already exists" % 
                                      (networkdir, os.path.join(joinedTempDir,networkdir)))
 
-                self.checkProjectVersion(parentdir=joinedTempDir, networkdir=networkdir,
+                self.checkVersion(version='champVersion',parentdir=joinedTempDir, networkdir=networkdir,
                                          gitdir=gitdir, projectsubdir=projectsubdir)
 
                 # TODO: we should verify we didn't require conflicting tags?
@@ -428,7 +419,7 @@ class Network(object):
             if retcode != 0:
                 raise NetworkException("Git checkout failed; see log file")
 
-        self.checkProjectVersion(parentdir=joinedTempDir, networkdir=networkdir,
+        self.checkVersion(version='champVersion',parentdir=joinedTempDir, networkdir=networkdir,
                                  gitdir=gitdir, projectsubdir=projectsubdir)
 
         return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
