@@ -6,14 +6,14 @@ class PlanSpecs:
     """ Simple class to read in the plan specifications from a CSV file.
     """
     
-    def __init__(self,basedir,networkdir,plansubdir,projectsubdir=None,tag=None,tempdir=None, **kwargs):
+    def __init__(self,champVersion,basedir,networkdir,plansubdir,projectsubdir=None,tag=None,tempdir=None, **kwargs):
         """
         Read specs file, check out projects and check the network type and project year
         """
         self.projects           = [] # list of projects included in the plan
         self.projectdict        = {} # plan name => dictionary of attributes
         #network is necessary to check out projects
-        self.network            = Network(champVersion=4.3,
+        self.network            = Network(champVersion=champVersion,
                                           networkBaseDir=basedir,
                                           networkPlanSubdir=plansubdir,
                                           networkProjectSubdir=projectsubdir)
@@ -28,7 +28,7 @@ class PlanSpecs:
                 header=line.strip().split(',')
             else:
                 l = line.strip().split(',')
-                #print l
+
                 project_name = l[header.index("projectname")]
                 projType = l[header.index("type")]
                 self.projectdict[project_name] = {}
@@ -42,9 +42,6 @@ class PlanSpecs:
                         plan_tag = kwargs['plan_tag']
                     if 'override' in kwargs.keys():
                         override = kwargs['override'] 
-                else:
-                    print "kwargs not coming through.", kwargs
-                    assert(1==2)
                     
                 # if project = "dir1/dir2" assume dir1 is git, dir2 is the projectsubdir
                 (head,tail) = os.path.split(project_name)
@@ -75,8 +72,6 @@ class PlanSpecs:
 
         for proj in self.projects:
             if netType in self.projectdict[proj]['nettypes']:
-##                print "proj: ", proj
-##                print "projAsDict: ", self.projectAsDict(proj)
                 projectlist.append(self.projectAsDict(proj))
         return projectlist
         
