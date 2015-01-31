@@ -57,6 +57,11 @@ class Network(object):
         return (retcode, retStdout, retStderr)
 
     def getReqs(self, networkdir, projectsubdir=None, tag=None, projtype=None, tempdir=None):
+        """
+        Checks project for pre-requisites, co-requisites, and conflicts
+
+        See :py:meth:`Wrangler.Network.applyProject` for argument details.
+        """
         (parentdir, networkdir, gitdir, projectsubdir) = self.parseProjArgs(networkdir, projectsubdir, projtype, tempdir)
         prereqs     = self.getAttr('prereqs',parentdir, networkdir, gitdir, projectsubdir)
         coreqs      = self.getAttr('coreqs',parentdir, networkdir, gitdir, projectsubdir)
@@ -64,9 +69,12 @@ class Network(object):
         return (prereqs, coreqs, conflicts)
 
     def parseProjArgs(self, networkdir, projectsubdir=None, projtype=None, tempdir=None):
-        if tempdir:
-            #gitdir = os.path.join(tempdir, networkdir)
+        """
+        Gets project arguments to clone and apply projects
 
+        See :py:meth:`Wrangler.Network.applyProject` for argument details.
+        """
+        if tempdir:
             if projtype=='plan':
                 joinedBaseDir = os.path.join(Network.NETWORK_BASE_DIR,Network.NETWORK_PLAN_SUBDIR)
                 joinedTempDir = os.path.join(tempdir, Network.NETWORK_PLAN_SUBDIR)
@@ -87,6 +95,13 @@ class Network(object):
             joinedTempDir = tempdir
             WranglerLogger.debug("Using tempdir %s" % tempdir)
             gitdir = os.path.join(tempdir, networkdir)
+
+        try:
+            commitstr = self.getCommit(gitdir)
+        except:
+            gitdir = os.path.join(gitdir, projectsubdir)
+            commitstr = self.getCommit(gitdir)
+            
         return (joinedTempDir, networkdir, gitdir, projectsubdir)
         
     def getAttr(self, attr_name, parentdir, networkdir, gitdir, projectsubdir=None):
@@ -217,7 +232,6 @@ class Network(object):
         """
         pass
 
-
     def cloneProject(self, networkdir, projectsubdir=None, tag=None, projtype=None, tempdir=None, **kwargs):
         """
         * *networkdir* corresponds to the dir relative to ``Y:\\networks``
@@ -228,6 +242,8 @@ class Network(object):
         
         Returns the SHA1 hash ID of the git commit of the project applied
         """
+
+
         if tempdir:
             #gitdir = os.path.join(tempdir, networkdir)
 
@@ -287,6 +303,7 @@ class Network(object):
         else:
             # need if for projtype... and joinedTempDir
             tempdir = tempfile.mkdtemp(prefix="Wrangler_tmp_", dir=".")
+            joinedTempDir = tempdir
             WranglerLogger.debug("Using tempdir %s" % tempdir)
             gitdir = os.path.join(tempdir, networkdir)
 
@@ -332,98 +349,10 @@ class Network(object):
         
         Returns the SHA1 hash ID of the git commit of the project applied
         """
-        if tempdir:
-            #gitdir = os.path.join(tempdir, networkdir)
-
-            if projtype=='plan':
-                joinedBaseDir = os.path.join(Network.NETWORK_BASE_DIR,Network.NETWORK_PLAN_SUBDIR)
-                joinedTempDir = os.path.join(tempdir, Network.NETWORK_PLAN_SUBDIR)
-            elif projtype=='project':
-                joinedBaseDir = os.path.join(Network.NETWORK_BASE_DIR,Network.NETWORK_PROJECT_SUBDIR)
-                joinedTempDir = os.path.join(tempdir, Network.NETWORK_PROJECT_SUBDIR)
-            elif projtype=='seed':
-                joinedBaseDir = os.path.join(Network.NETWORK_BASE_DIR,Network.NETWORK_SEED_SUBDIR)
-                joinedTempDir = os.path.join(tempdir, Network.NETWORK_SEED_SUBDIR)
-            else:
-                joinedBaseDir = Network.NETWORK_BASE_DIR
-                joinedTempDir = tempdir
-                
-            gitdir = os.path.join(joinedTempDir, networkdir)
-            
-            if not os.path.exists(joinedTempDir):
-                os.makedirs(joinedTempDir)
-                
-            # if the tempdir exists and it's already here and the projectsubdir is present, 
-            # then we already checked it out
-            elif projectsubdir and os.path.exists(os.path.join(joinedTempDir,networkdir,projectsubdir)):
-                WranglerLogger.debug("Skipping checkout of %s, %s already exists" % 
-                                     (networkdir, os.path.join(joinedTempDir,networkdir,projectsubdir)))
-
-                 # verify we didn't require conflicting tags
-                try:
-                    commitstr = self.getCommit(gitdir)
-                except:
-                    gitdir = os.path.join(gitdir, projectsubdir)
-                    commitstr = self.getCommit(gitdir)
-
-                tags = self.getTags(gitdir, commitstr)
-                if tag and (not tags or tag not in tags):
-                    # TODO: just checkout to the new tag
-                    raise NetworkException("Conflicting tag requirements - FIXME!")
-
-                self.checkVersion(version='champVersion',parentdir=joinedTempDir, networkdir=networkdir,
-                                         gitdir=gitdir, projectsubdir=projectsubdir)
-                
-                return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
-                                         gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
-            
-            elif not projectsubdir and os.path.exists(os.path.join(joinedTempDir,networkdir)):
-                WranglerLogger.debug("Skipping checkout of %s, %s already exists" % 
-                                     (networkdir, os.path.join(joinedTempDir,networkdir)))
-
-                self.checkVersion(version='champVersion',parentdir=joinedTempDir, networkdir=networkdir,
-                                         gitdir=gitdir, projectsubdir=projectsubdir)
-
-                # TODO: we should verify we didn't require conflicting tags?
-                return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
-                                         gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
-        else:
-            # need if for projtype... and joinedTempDir
-            tempdir = tempfile.mkdtemp(prefix="Wrangler_tmp_", dir=".")
-            WranglerLogger.debug("Using tempdir %s" % tempdir)
-            gitdir = os.path.join(tempdir, networkdir)
-
-        WranglerLogger.debug("Checking out networkdir %s into tempdir %s %s" %
-                             (networkdir, joinedTempDir,"for "+projectsubdir if projectsubdir else ""))
-        cmd = r"git clone -b master --quiet %s" % os.path.join(joinedBaseDir, networkdir)
-        (retcode, retstdout, retstderr) = self._runAndLog(cmd, joinedTempDir)
-
-        if retcode != 0:
-            if not projectsubdir:
-                raise NetworkException("Git clone failed; see log file")
-
-            # if there was a subdir involved, try checking if the subdir is the git dir
-            gitdir = os.path.join(gitdir, projectsubdir)
-            newtempdir = os.path.join(joinedTempDir,networkdir)
-            if not os.path.exists(newtempdir):
-                os.makedirs(newtempdir)
-
-            cmd = r"git clone  -b master --quiet %s" % os.path.join(joinedBaseDir, networkdir, projectsubdir)
-            (retcode, retstdout, retstderr) = self._runAndLog(cmd, newtempdir)
-
-        if tag != None:
-            cmd = r"git checkout %s" % tag
-            print "cmd: %s" % cmd
-            print "gitdir: %s" % gitdir
-            (retcode, retstdout, retstderr) = self._runAndLog(cmd, gitdir)
-            if retcode != 0:
-                raise NetworkException("Git checkout failed; see log file")
-
-        self.checkVersion(version='champVersion',parentdir=joinedTempDir, networkdir=networkdir,
-                                 gitdir=gitdir, projectsubdir=projectsubdir)
-
+        self.cloneProject(networkdir, projectsubdir, tag, projtype, tempdir, **kwargs)
+        (joinedTempDir, networkdir, gitdir, projectsubdir) = self.parseProjArgs(networkdir, projectsubdir, projtype, tempdir)
         return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
-                          gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
+                                 gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
 
     def getCommit(self, gitdir):
         """
