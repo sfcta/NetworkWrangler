@@ -62,13 +62,13 @@ class Network(object):
 
         See :py:meth:`Wrangler.Network.applyProject` for argument details.
         """
-        (parentdir, networkdir, gitdir, projectsubdir) = self.parseProjArgs(networkdir, projectsubdir, projtype, tempdir)
+        (parentdir, networkdir, gitdir, projectsubdir) = self.getClonedProjectArgs(networkdir, projectsubdir, projtype, tempdir)
         prereqs     = self.getAttr('prereqs',parentdir, networkdir, gitdir, projectsubdir)
         coreqs      = self.getAttr('coreqs',parentdir, networkdir, gitdir, projectsubdir)
         conflicts   = self.getAttr('conflicts',parentdir, networkdir, gitdir, projectsubdir)
         return (prereqs, coreqs, conflicts)
 
-    def parseProjArgs(self, networkdir, projectsubdir=None, projtype=None, tempdir=None):
+    def getClonedProjectArgs(self, networkdir, projectsubdir=None, projtype=None, tempdir=None):
         """
         Gets project arguments to clone and apply projects
 
@@ -284,7 +284,9 @@ class Network(object):
                     raise NetworkException("Conflicting tag requirements - FIXME!")
 
                 self.checkVersion(version='champVersion',parentdir=joinedTempDir, networkdir=networkdir,
-                                         gitdir=gitdir, projectsubdir=projectsubdir)
+                                  gitdir=gitdir, projectsubdir=projectsubdir)
+                self.checkVersion(version='wranglerVersion',parentdir=joinedTempDir, networkdir=networkdir,
+                                  gitdir=gitdir, projectsubdir=projectsubdir)
 
                 commitstr = self.getCommit(gitdir)
                 return commitstr
@@ -294,7 +296,9 @@ class Network(object):
                                      (networkdir, os.path.join(joinedTempDir,networkdir)))
 
                 self.checkVersion(version='champVersion',parentdir=joinedTempDir, networkdir=networkdir,
-                                         gitdir=gitdir, projectsubdir=projectsubdir)
+                                  gitdir=gitdir, projectsubdir=projectsubdir)
+                self.checkVersion(version='wranglerVersion',parentdir=joinedTempDir, networkdir=networkdir,
+                                  gitdir=gitdir, projectsubdir=projectsubdir)
 
                 # TODO: we should verify we didn't require conflicting tags?
                 commitstr = self.getCommit(gitdir)
@@ -334,7 +338,9 @@ class Network(object):
                 raise NetworkException("Git checkout failed; see log file")
 
         self.checkVersion(version='champVersion',parentdir=joinedTempDir, networkdir=networkdir,
-                                 gitdir=gitdir, projectsubdir=projectsubdir)
+                          gitdir=gitdir, projectsubdir=projectsubdir)
+        self.checkVersion(version='wranglerVersion',parentdir=joinedTempDir, networkdir=networkdir,
+                          gitdir=gitdir, projectsubdir=projectsubdir)
 
         commitstr = self.getCommit(gitdir)
         return commitstr
@@ -350,7 +356,7 @@ class Network(object):
         Returns the SHA1 hash ID of the git commit of the project applied
         """
         self.cloneProject(networkdir, projectsubdir, tag, projtype, tempdir, **kwargs)
-        (joinedTempDir, networkdir, gitdir, projectsubdir) = self.parseProjArgs(networkdir, projectsubdir, projtype, tempdir)
+        (joinedTempDir, networkdir, gitdir, projectsubdir) = self.getClonedProjectArgs(networkdir, projectsubdir, projtype, tempdir)
         return self.applyProject(parentdir=joinedTempDir, networkdir=networkdir,
                                  gitdir=gitdir, projectsubdir=projectsubdir, **kwargs)
 

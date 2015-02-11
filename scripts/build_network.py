@@ -602,9 +602,9 @@ if __name__ == '__main__':
             applied_SHA1 = None 
             (head,tail) = os.path.split(project_name)
             if head:
-                (parentdir, networkdir, gitdir, projectsubdir) = networks[netmode].parseProjArgs(head, tail, projType, TEMP_SUBDIR)
+                (parentdir, networkdir, gitdir, projectsubdir) = networks[netmode].getClonedProjectArgs(head, tail, projType, TEMP_SUBDIR)
             else:
-                (parentdir, networkdir, gitdir, projectsubdir) = networks[netmode].parseProjArgs(project_name, None, projType, TEMP_SUBDIR)
+                (parentdir, networkdir, gitdir, projectsubdir) = networks[netmode].getClonedProjectArgs(project_name, None, projType, TEMP_SUBDIR)
 
             applied_SHA1 = networks[netmode].applyProject(parentdir, networkdir, gitdir, projectsubdir)
             appliedcount += 1
