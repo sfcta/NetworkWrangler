@@ -6,18 +6,21 @@ class PlanSpecs:
     """ Simple class to read in the plan specifications from a CSV file.
     """
     
-    def __init__(self,basedir,networkdir,plansubdir,projectsubdir=None,tag=None,tempdir=None, **kwargs):
+    def __init__(self,champVersion,basedir,networkdir,plansubdir,projectsubdir=None,tag=None,tempdir=None, **kwargs):
         """
         Read specs file, check out projects and check the network type and project year
         """
-        self.projects = [] # list of projects included in the plan
-        self.projectdict = {} # plan name => dictionary of attributes
-        self.network = Network(champVersion="4.3",
-                               networkBaseDir=basedir,
-                               networkPlanSubdir=plansubdir,
-                               networkProjectSubdir=projectsubdir)
+        self.projects           = [] # list of projects included in the plan
+        self.projectdict        = {} # plan name => dictionary of attributes
+        #network is necessary to check out projects
+        self.network            = Network(champVersion=champVersion,
+                                          networkBaseDir=basedir,
+                                          networkPlanSubdir=plansubdir,
+                                          networkProjectSubdir=projectsubdir)
+        self.plan_tag           = None
+        self.override           = []
         
-        specs = open(os.path.join(basedir,plansubdir,networkdir,'planSpecs.csv'),'r')
+        specs = open(os.path.join(tempdir,plansubdir,networkdir,'planSpecs.csv'),'r')
         i=0
         for line in specs:
             i+=1
@@ -25,7 +28,7 @@ class PlanSpecs:
                 header=line.strip().split(',')
             else:
                 l = line.strip().split(',')
-                #print l
+
                 project_name = l[header.index("projectname")]
                 projType = l[header.index("type")]
                 self.projectdict[project_name] = {}
@@ -35,18 +38,19 @@ class PlanSpecs:
                 self.projectdict[project_name]["projtype"]=projType
                 if kwargs:
                     self.projectdict[project_name]["kwargs"]=kwargs
-                else:
-                    print "kwargs not coming through.", kwargs
-                    assert(1==2)
-
+                    if 'plan_tag' in kwargs.keys():
+                        plan_tag = kwargs['plan_tag']
+                    if 'override' in kwargs.keys():
+                        override = kwargs['override'] 
+                    
                 # if project = "dir1/dir2" assume dir1 is git, dir2 is the projectsubdir
-                (head,tail) = os.path.split(os.path.join(networkdir,project_name))
+                (head,tail) = os.path.split(project_name)
                 if head:
-                    applied_SHA1 = self.network.cloneAndApplyProject(networkdir=head, projectsubdir=tail, tag=tag,
+                    applied_SHA1 = self.network.cloneProject(networkdir=head, projectsubdir=tail, tag=tag,
                                                                      projtype=projType, tempdir=tempdir)
                     self.projectdict[project_name]["nettypes"]=self.network.getNetTypes(tempdir,head,tail)
                 else:
-                    applied_SHA1 = self.network.cloneAndApplyProject(networkdir=project_name, tag=tag,
+                    applied_SHA1 = self.network.cloneProject(networkdir=project_name, tag=tag,
                                                                      projtype=projType, tempdir=tempdir)
                     self.projectdict[project_name]["nettypes"]=self.network.getNetTypes(tempdir,project_name)
 
@@ -68,8 +72,6 @@ class PlanSpecs:
 
         for proj in self.projects:
             if netType in self.projectdict[proj]['nettypes']:
-                print "proj: ", proj
-                print "projAsDict: ", self.projectAsDict(proj)
                 projectlist.append(self.projectAsDict(proj))
         return projectlist
         
