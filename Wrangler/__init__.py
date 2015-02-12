@@ -4,11 +4,6 @@ from .Network import Network
 from .NetworkException import NetworkException
 from .PNRLink import PNRLink
 from .Supplink import Supplink
-##try:
-##    from .TransitAssignmentData import TransitAssignmentData
-##except:
-##    print "Unexpected error:", sys.exc_info()
-##    from .transitAssignmentData import TransitAssignmentData
 from .TransitAssignmentData import TransitAssignmentData ##
 from .TransitCapacity import TransitCapacity
 from .TransitLine import TransitLine
