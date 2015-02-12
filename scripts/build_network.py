@@ -1,8 +1,8 @@
 import copy,datetime,getopt,logging,os,shutil,sys,time
 
 # use Wrangler from the same directory as this build script
-sys.path.insert(0, os.path.realpath("."))
-sys.path.insert(0, r"Y:\Users\Drew\NetworkWrangler")
+sys.path.insert(0, os.path.join(os.path.dirname(__file__),".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__),"..\_static"))
 import Wrangler
 from Wrangler import PlanSpecs
 
