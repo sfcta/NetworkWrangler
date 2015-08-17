@@ -245,8 +245,6 @@ class Network(object):
 
 
         if tempdir:
-            #gitdir = os.path.join(tempdir, networkdir)
-
             if projtype=='plan':
                 joinedBaseDir = os.path.join(Network.NETWORK_BASE_DIR,Network.NETWORK_PLAN_SUBDIR)
                 joinedTempDir = os.path.join(tempdir, Network.NETWORK_PLAN_SUBDIR)
@@ -313,7 +311,11 @@ class Network(object):
 
         WranglerLogger.debug("Checking out networkdir %s into tempdir %s %s" %
                              (networkdir, joinedTempDir,"for "+projectsubdir if projectsubdir else ""))
-        cmd = r"git clone -b master --quiet %s" % os.path.join(joinedBaseDir, networkdir)
+
+        if os.path.exists(os.path.join(joinedBaseDir,networkdir,'.git')):
+            cmd = r"git clone -b master --quiet %s %s" % (os.path.join(joinedBaseDir, networkdir), networkdir)
+        else:
+            cmd = r"git clone -b master --quiet %s" % os.path.join(joinedBaseDir, networkdir)
         (retcode, retstdout, retstderr) = self._runAndLog(cmd, joinedTempDir)
 
         if retcode != 0:
@@ -331,8 +333,6 @@ class Network(object):
 
         if tag != None:
             cmd = r"git checkout %s" % tag
-            print "cmd: %s" % cmd
-            print "gitdir: %s" % gitdir
             (retcode, retstdout, retstderr) = self._runAndLog(cmd, gitdir)
             if retcode != 0:
                 raise NetworkException("Git checkout failed; see log file")
