@@ -131,7 +131,7 @@ def getProjectMatchLevel(left, right):
         match = 2
     elif left_name == right_name:
         match = 1
-    Wrangler.WranglerLogger.debug("Match level %d for %s and %s" % (match, os.path.join(left_path,left_name), os.path.join(right_path,right_name)))
+    #Wrangler.WranglerLogger.debug("Match level %d for %s and %s" % (match, os.path.join(left_path,left_name), os.path.join(right_path,right_name)))
     return match
 
 def checkRequirements(REQUIREMENTS, PROJECTS, req_type='prereq', mode='all'):
@@ -235,28 +235,41 @@ def writeRequirementsToScreen(REQUIREMENTS, req_type='prereq'):
             
         for proj in REQUIREMENTS[net].keys():
             for req in REQUIREMENTS[net][proj].keys():
-                line  = ""
-                line1 = "%-23s%-7s%-6s%-23s" %(proj[0:proj_name_max_width],req_type[0:6].upper(), net, req[0:proj_name_max_width])
-                line2 = "%-23s%-13s%-23s" % (proj[proj_name_max_width:],"",req[proj_name_max_width:])
-                
-                if REQUIREMENTS[net][proj][req] != []:
-                    i = 0
-                    for match in REQUIREMENTS[net][proj][req]:
-                        line1 = line1 + "%-6s%-23s%-4s" %(str(match['level']),
-                                                          match['name'][0:proj_name_max_width],match['net_type'])
-                        line2 = line2 + "%-6s%-23s%-4s" %("",
-                                                          match['name'][proj_name_max_width:],"")
+                line_to_print = ""
+                i = 0
+                left_to_get = 0
+                while i == 0 or left_to_get > 0:
+                    line = ""
+                    if i == 0:
+                        line_part_one = "%-23s%-7s%-6s%-23s" %(proj[0:proj_name_max_width],req_type[0:6].upper(),
+                                                               net, req[0:proj_name_max_width])
+                    else:
+                        line_part_one = "%-23s%-13s%-23s" % (proj[i*proj_name_max_width:(i+1)*proj_name_max_width],
+                                                             "",req[i*proj_name_max_width:(i+1)*proj_name_max_width])
 
-                        if not line2.isspace():
-                            line = line + line1 + '\n' + line2 + '\n'
+                    left_to_get = max(0, len(proj) - (i+1) * proj_name_max_width)
+                    if REQUIREMENTS[net][proj][req] != []:
+                        for match in REQUIREMENTS[net][proj][req]:
+                            if i == 0:
+                                line = line_part_one + "%-6s%-23s%-4s" %(str(match['level']),
+                                                                         match['name'][0:proj_name_max_width],match['net_type'])
+                            else:
+                                line = line_part_one + "%-6s%-23s%-4s" %("",
+                                                                         match['name'][i*proj_name_max_width:(i+1)*proj_name_max_width],"")
+
+                            left_to_get = max(left_to_get, len(match['name']) - (i+1) * proj_name_max_width)
+                            if line_to_print.isspace():
+                                line_to_print = line_to_print + line
+                            else:
+                                line_to_print = line_to_print + '\n' + line
+                            line = "%-59s" % ""
+                    else:
+                        if line_to_print.isspace():
+                            line_to_print = line_part_one + "%-6s%-23s%-4s\n" %("NA","MISSING","NA")
                         else:
-                            line = line + line1 + '\n'
-                          
-                        line1 = "%-59s" % ""
-                        line2 = "%-59s" % ""
-                else:
-                    line = line1 + "%-6s%-23s%-4s\n" %("NA","MISSING","NA")
-                print line
+                            line_to_print = line_to_print + '\n' + line_part_one + "%-6s%-23s%-4s\n" %("NA","MISSING","NA")
+                    i += 1
+                print line_to_print
         print '\n'
 
 def getProjectAttributes(project):
@@ -619,7 +632,7 @@ if __name__ == '__main__':
                                     name=netmode,
                                     suppressQuery = True if BUILD_MODE=="test" else False,
                                     suppressValidation = False, cubeNetFileForValidation = os.path.join(hwypath, HWY_OUTFILE))
-
+        
     # Write the transit capacity configuration
     Wrangler.TransitNetwork.capacity.writeTransitVehicleToCapacity(directory = trnpath)
     Wrangler.TransitNetwork.capacity.writeTransitLineToVehicle(directory = trnpath)
