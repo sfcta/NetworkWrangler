@@ -130,14 +130,12 @@ class Network(object):
             evalstr = "import %s" % projectname
             exec(evalstr)
         except Exception as e:
-            #WranglerLogger.debug("error importing module")
             s_projectname = "s"+str(projectname)
             evalstr = "%s = __import__('%s')" % (s_projectname, projectname)
             exec(evalstr)
         evalstr = "dir(%s)" % (projectname if not s_projectname else s_projectname)
         projectdir = eval(evalstr)
-        
-        # WranglerLogger.debug("projectdir = " + str(projectdir))
+
         attr_value = (eval("%s.%s()" % ((projectname if not s_projectname else s_projectname),attr_name)))
         return attr_value        
     

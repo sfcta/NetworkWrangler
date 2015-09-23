@@ -165,6 +165,111 @@ class HighwayNetwork(Network):
                                projectname=(networkdir + "\\" + projectsubdir if projectsubdir else networkdir),
                                year=year, projectdesc=desc, county=county)
 
+    def validateTurnPens(self, CubeNetFile, turnPenReportFile=None, suggestCorrectLink=True):
+        import Cube
+        turnpens_files = ['turnsam.pen','turnsop.pen','turnspm.pen']
+        pen_regex = r'^\s*(?P<frnode>\d+)\s+(?P<thnode>\d+)\s+(?P<tonode>\d+)\s+\d+\s+(?P<pen>-[\d+])'
+        if turnPenReportFile:
+            outfile = open(turnPenReportFile,'w')
+            outfile.write('file,old_from,old_through,old_to,on_street,at_street,new_from,new_through,new_to,note\n')
+            
+        (nodes_dict, links_dict) = Cube.import_cube_nodes_links_from_csvs(CubeNetFile,
+                                                                          extra_link_vars=['LANE_AM', 'LANE_OP','LANE_PM',
+                                                                                           'BUSLANE_AM', 'BUSLANE_OP', 'BUSLANE_PM'],
+                                                                          extra_node_vars=[],
+                                                                          links_csv=os.path.join(os.getcwd(),"cubenet_validate_links.csv"),
+                                                                          nodes_csv=os.path.join(os.getcwd(),"cubenet_validate_nodes.csv"),
+                                                                          exportIfExists=True)
+        found_matches = {}
+        
+        for file_name in turnpens_files:
+            f = open(file_name,'r')
+            for line in f:
+                text = line.split(';')[0]
+                m = re.match(pen_regex, text)
+                if m:
+                    new_fr = None
+                    new_th = None
+                    new_to = None
+                    from_street = 'missing'
+                    to_street = 'missing'
+                    fr_node = int(m.groupdict()['frnode'])
+                    th_node = int(m.groupdict()['thnode'])
+                    to_node = int(m.groupdict()['tonode'])
+                    pen     = int(m.groupdict()['pen'])
+                    if not (fr_node,th_node) in links_dict:
+                        WranglerLogger.debug("HighwayNetwork.validateTurnPens: (%d, %d) not in the roadway network for %s (%d, %d, %d)" % (fr_node,th_node,file_name,fr_node,th_node,to_node))
+                        
+                        if suggestCorrectLink:
+                            new_fr = -1
+                            new_th = th_node
+                            match_links_fr = []
+                            match_links_th = []
+                            # if we already found a match for this, don't keep looking.
+                            if (fr_node,th_node) in found_matches.keys():
+                                match = found_matches[(fr_node,th_node)]
+                                new_fr = match[0][1]
+                            else:
+                                #catch the links matching fr_node on the from end
+                                for (a,b) in links_dict.keys():
+                                    if a == fr_node:
+                                        match_links_fr.append((a,b))
+                                    # and links matching th_node on the to end
+                                    if b == th_node:
+                                        match_links_th.append((a,b))
+                                # now take matched links and look for match_links_fr node b to match match_links_th node a
+                                for (a1,b1) in match_links_fr:
+                                    for (a2,b2) in match_links_th:
+                                        if b1 == a2:
+                                            #WranglerLogger.info("For link1 (%d, %d) and link2 (%d, %d): %d == %d" % (a1,b1,a2,b2,b1,a2))
+                                            found_matches[(fr_node,th_node)] = [(a1,b1),(a2,b2)]
+                                            new_fr = a2
+                                            # index 1 is streetname
+                                            from_street = links_dict[(a2,b2)][1]
+                                            break
+                    else:
+                        new_fr = fr_node
+                        from_street = links_dict[(fr_node,th_node)][1]
+        
+                            
+                    if not (th_node,to_node) in links_dict:
+                        WranglerLogger.debug("HighwayNetwork.validateTurnPens: (%d, %d) not in the roadway network for %s (%d, %d, %d)" % (th_node,to_node,file_name,fr_node,th_node,to_node))
+                        #if turnPenReportFile: outfile.write("%s,%d,%d,outbound link missing from, %d, %d, %d\n" %(file_name,th_node,to_node,fr_node,th_node,to_node))
+                        if suggestCorrectLink:
+                            new_th = th_node
+                            new_to = -1
+                            match_links_th = []
+                            match_links_to = []
+                            # if we already found a match for this, don't keep looking.
+                            if (th_node,to_node) in found_matches.keys():
+                                match = found_matches[(th_node,to_node)]
+                                new_to = match[0][1]
+                            else:
+                                #catch the links matching fr_node on the from end
+                                for (a,b) in links_dict.keys():
+                                    if a == th_node:
+                                        match_links_th.append((a,b))
+                                    # and links matching th_node on the to end
+                                    if b == to_node:
+                                        match_links_to.append((a,b))
+                                # now take matched links and look for match_links_fr node b to match match_links_th node a
+                                for (a1,b1) in match_links_th:
+                                    for (a2,b2) in match_links_to:
+                                        if b1 == a2:
+                                            #WranglerLogger.info("For link1 (%d, %d) and link2 (%d, %d): %d == %d" % (a1,b1,a2,b2,b1,a2))
+                                            found_matches[(th_node,to_node)] = [(a1,b1),(a2,b2)]
+                                            new_to = a2
+                                            to_street = links_dict[(a2,b2)][1]
+                                            break
+                    else:
+                        new_to = to_node
+                        to_street = links_dict[(th_node,to_node)][1]
+                    
+                    if new_th != None:
+                        #outfile.write('file,old_from,old_through,old_to,on_street,at_street,new_from,new_through,new_to,note\n')
+                        print file_name,fr_node,th_node,to_node,from_street,to_street,new_fr,new_th,new_to
+                        outfile.write('%s,%d,%d,%d,%s,%s,%d,%d,%d,note\n' % (file_name,fr_node,th_node,to_node,from_street,to_street,new_fr if new_fr else -1,new_th,new_to if new_to else -1))
+                
     def write(self, path='.', name='FREEFLOW.NET', writeEmptyFiles=True, suppressQuery=False, suppressValidation=False):
         if not os.path.exists(path):
             WranglerLogger.debug("\nPath [%s] doesn't exist; creating." % path)
@@ -189,3 +294,5 @@ class HighwayNetwork(Network):
 
         for filename in ["turnsam.pen",         "turnspm.pen",          "turnsop.pen"]:
             shutil.copyfile(filename, os.path.join(path, filename))
+            
+        if not suppressValidation: self.validateTurnPens(netfile,'turnPenValidations.csv')
