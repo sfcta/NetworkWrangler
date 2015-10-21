@@ -58,11 +58,18 @@ if __name__=='__main__':
     # Get transit network
     transit_network = TransitNetwork(5.0)
     transit_network.mergeDir(TRN_BASE)
+    print "adding xy to Nodes"
     transit_network.addXY(nodes_dict)
+    print "adding first departure times to all lines"
     transit_network.addFirstDeparturesToAllLines()
+    print "adding travel times to all lines"
     transit_network.addTravelTimes(highway_networks)
+    print "writing lines to shapes.txt"
+    transit_network.writeFastTrips_Shapes('shapes.txt')
+    print "writing stop times to stop_times.txt"
+    transit_network.writeFastTrips_Trips('trips.txt','stop_times.txt')
 
-    test=True
+    test=False
     if test:
         print "testing"
         outfile = open(os.path.join(FT_OUTPATH,'links.csv'),'w')
@@ -79,7 +86,7 @@ if __name__=='__main__':
         print "Checking lines for BUSTIME"
         for line in transit_network.lines:
             if isinstance(line, TransitLine):
-                for link_id, link_values in line.links.iteritems:
+                for link_id, link_values in line.links.iteritems():
                     if isinstance(link_values, TransitLink):
                         if line['FREQ[1]'] != 0 and 'BUSTIME_AM' not in link_values.keys():
                             print '%s, %s: Missing BUSTIME for AM' % (line.name, link_values.id)
