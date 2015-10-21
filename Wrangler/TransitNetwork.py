@@ -767,17 +767,22 @@ class TransitNetwork(Network):
                 WranglerLogger.debug("skipping line because unknown type")
         print "wrote %d lines" % count
         
-    def writeFastTrips_StopTimes(self, f, writeHeaders=True):
+    def writeFastTrips_Trips(self, f_trips, f_stoptimes, writeHeaders=True):
         '''
         Iterate each line in this TransitNetwork and write fast-trips style stop_times.txt fo f
         This requires that each line has a complete set of links with ``BUSTIME_<TOD>`` for each
         <TOD> in ``AM``, ``MD``, ``PM``, ``EV``, ``EA``.
         '''
         # check if it's a filename or a file. Open it if it's a filename
-        if isinstance(f, str):
-            f = open(f, 'w')
-        elif isinstance(f, file):
-            if filestream.closed: f = open(f.name)
+        if isinstance(f_trips, str):
+            f_trips = open(f_trips, 'w')
+        elif isinstance(f_trips, file):
+            if f_trips.closed: f_trips = open(f_trips.name)
+            
+        if isinstance(f_stoptimes, str):
+            f_stoptimes = open(f_stoptimes, 'w')
+        elif isinstance(f_stoptimes, file):
+            if f_stoptimes.closed: f_stoptimes = open(f_stoptimes.name)
 
         id_generator = self.generate_unique_id(range(1,999999))
         
@@ -786,7 +791,7 @@ class TransitNetwork(Network):
             if isinstance(line, str):
                 pass
             elif isinstance(line, TransitLine):
-                line.writeFastTrips_StopTimes(f, id_generator, writeHeaders)
+                line.writeFastTrips_Trips(f_trips, f_stoptimes, id_generator, writeHeaders)
                 writeHeaders = False # only write them the with the first line.
                 
     def generate_unique_id(self, seq):
@@ -795,9 +800,6 @@ class TransitNetwork(Network):
         """
         for x in seq:
             yield x
-            
-    def writeFastTrips_Trips():
-        pass
     
     def writeFastTrips_FareRules():
         pass

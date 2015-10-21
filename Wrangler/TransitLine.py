@@ -338,19 +338,20 @@ class TransitLine(object):
                 raise NetworkException(ex)
             else:
                 a_node, b_node = abs(int(a.num)), abs(int(b.num))
-                print '%s,%f,%f,%d,%f\n' % (self.name, a.y ,a.x, seq, cum_dist)
                 f.write('%s,%f,%f,%d,%f\n' % (self.name, a.y ,a.x, seq, cum_dist))
                 seq += 1
                 
         # write the last node
         f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].y, self.n[-1].x, seq, cum_dist))
 
-    def writeFastTrips_StopTimes(self, f, id_generator, writeHeaders=False):
+    def writeFastTrips_Trips(self, f_trips, f_stoptimes, id_generator, writeHeaders=False):
         '''
         Writes fast-trips style stop_times records for this line.
         Writes a header if writeHeaders = True
         '''
-        if writeHeaders: f.write('trip_id,arrival_time,departure_time,stop_id,stop_sequence\n')
+        if writeHeaders:
+            f_trips.write('route_id,service_id,trip_id,shape_id\n')
+            f_stoptimes.write('trip_id,arrival_time,departure_time,stop_id,stop_sequence\n')
 
         for tp in TransitLine.ALL_TIMEPERIODS:
             headway = self.getFreq(tp)
@@ -364,6 +365,7 @@ class TransitLine(object):
                 stop_time = departure + cum_time
                 seq = 1
                 trip_id = id_generator.next()
+                f_trips.write('%s,%d,%d,%s\n' % (self.name,1,trip_id,self.name))
                 for a, b in zip(self.n[:-1], self.n[1:]):
                     if not isinstance(a, Node) or not isinstance(b, Node):
                         ex = "Not all nodes in line %s are type Node" % self.name
@@ -378,7 +380,7 @@ class TransitLine(object):
                         except:
                             WranglerLogger.debug("LINE %s, LINK %s: NO BUSTIME FOUND FOR TP %s" % (self.name, ab_link.id, tp))
                         rest_time = 0
-                        f.write('%d,%d,%d,%d,%d\n' % (trip_id, stop_time, stop_time, a_node, seq))
+                        f_stoptimes.write('%d,%d,%d,%d,%d\n' % (trip_id, stop_time, stop_time, a_node, seq))
                         try:
                             cum_time += traveltime
                             stop_time = departure + cum_time
@@ -386,13 +388,7 @@ class TransitLine(object):
                         except:
                             print cum_time, stop_time, departure, seq
                 departure += headway
-                f.write('%d,%d,%d,%d,%d\n' % (trip_id, stop_time, stop_time, b_node, seq))
-
-##    def writeFastTrips_Trips(self, f, writeHeaders=False):
-##        '''
-##        Writes fast-trips style trips records for this line.
-##        '''
-##        if writeHeaders: f.write('route_id,service_id,trip_id,shape_id')
+                f_stoptimes.write('%d,%d,%d,%d,%d\n' % (trip_id, stop_time, stop_time, b_node, seq))
     
     def hasService(self):
         """
