@@ -19,7 +19,7 @@ class Node(object):
     descriptions        = {}
     descriptions_read   = False
 
-    def __init__(self, n):
+    def __init__(self, n, coord_dict=None):
         self.attr = {}
         if isinstance(n,int):
             self.num = str(n)
@@ -28,6 +28,21 @@ class Node(object):
         self.stop=(self.num.find('-')<0 and True or False)
         self.comment = None
 
+        if isinstance(coord_dict, dict):
+            (self.x,self.y) = coord_dict[n]
+        else:
+            (self.x,self.y) = (-1,-1)                
+
+    def addXY(self, coords):
+        """
+        takes an (x,y) tuple or a dict of node numbers to (x,y) tuples
+        """
+        n = abs(int(self.num))
+        if isinstance(coords, tuple):
+            (self.x, self.y) = coords
+        elif isinstance(coords, dict):
+            (self.x, self.y) = coords[n]
+            
     def setStop(self, isStop=True):
         """
         Changes to stop-status of this node to *isStop*
