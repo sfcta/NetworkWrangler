@@ -1,6 +1,7 @@
 import logging
 import os.path
 from .Network import Network
+from .Logger import WranglerLogger
 
 class PlanSpecs:
     """ Simple class to read in the plan specifications from a CSV file.
@@ -19,6 +20,15 @@ class PlanSpecs:
                                           networkProjectSubdir=projectsubdir)
         self.plan_tag           = None
         self.override           = []
+        self.modelyear          = None
+        if kwargs:
+            if 'modelyear' in kwargs.keys():
+                self.modelyear = kwargs['modelyear']
+            #These next two don't do anything now.
+            if 'plan_tag' in kwargs.keys():
+                self.plan_tag = kwargs['plan_tag']
+            if 'override' in kwargs.keys():
+                self.override = kwargs['override']
         
         specs = open(os.path.join(tempdir,plansubdir,networkdir,'planSpecs.csv'),'r')
         i=0
@@ -38,21 +48,20 @@ class PlanSpecs:
                 self.projectdict[project_name]["projtype"]=projType
                 if kwargs:
                     self.projectdict[project_name]["kwargs"]=kwargs
-                    if 'plan_tag' in kwargs.keys():
-                        plan_tag = kwargs['plan_tag']
-                    if 'override' in kwargs.keys():
-                        override = kwargs['override'] 
                     
                 # if project = "dir1/dir2" assume dir1 is git, dir2 is the projectsubdir
                 (head,tail) = os.path.split(project_name)
                 if head:
                     applied_SHA1 = self.network.cloneProject(networkdir=head, projectsubdir=tail, tag=tag,
                                                                      projtype=projType, tempdir=tempdir)
+                    (parentdir, networkdir, gitdir, projectsubdir) = self.network.getClonedProjectArgs(head, tail, projType, tempdir)
                     self.projectdict[project_name]["nettypes"]=self.network.getNetTypes(tempdir,head,tail)
                 else:
                     applied_SHA1 = self.network.cloneProject(networkdir=project_name, tag=tag,
                                                                      projtype=projType, tempdir=tempdir)
+                    (parentdir, networkdir, gitdir, projectsubdir) = self.network.getClonedProjectArgs(project_name, None, projType, tempdir)
                     self.projectdict[project_name]["nettypes"]=self.network.getNetTypes(tempdir,project_name)
+                self.projectdict[project_name]["year"]= self.network.getAttr('year',parentdir, networkdir, gitdir, projectsubdir)
 
     def projectAsDict(self,project_name):
         projDict = {}
@@ -72,7 +81,10 @@ class PlanSpecs:
 
         for proj in self.projects:
             if netType in self.projectdict[proj]['nettypes']:
-                projectlist.append(self.projectAsDict(proj))
+                if not self.modelyear or self.modelyear >= self.projectdict[proj]["year"]:
+                    projectlist.append(self.projectAsDict(proj))
+                else:
+                    WranglerLogger.warn("not applying %s, projectyear %d >= modelyear %d" % (proj, self.projectdict[proj]["year"], self.modelyear))
         return projectlist
         
     def printProjects(self,fileObj):
