@@ -41,12 +41,14 @@ class TransitNetwork(Network):
         Network.__init__(self, champVersion, networkBaseDir, networkProjectSubdir, networkSeedSubdir,
                          networkPlanSubdir, networkName)
         self.lines = []
+        #note self.links is transit support links, i.e. stuff in muni.link, caltrain.link, etc.
         self.links = []
         self.pnrs   = []
         self.zacs   = []
         self.accessli = []
         self.xferli   = []
         self.farefiles = {} # farefile name -> [ lines in farefile ]
+        
         for farefile in TransitNetwork.FARE_FILES:
             self.farefiles[farefile] = []
 
@@ -693,6 +695,108 @@ class TransitNetwork(Network):
     @staticmethod
     def initializeTransitCapacity(directory="."):
         TransitNetwork.capacity = TransitCapacity(directory=directory)
+
+    def addXY(self, coord_dict=None):
+        '''
+        takes a dict of node_number to (x,y) and iterates through each TransitLine and Node, adding
+        xy-coordinates as attributes to the Node
+        '''
+        for line in self.lines:
+            if isinstance(line, str):
+                # then it's just a comment/text line, so pass
+                pass
+            elif isinstance(line, TransitLine):
+                # then we should add coordinates to it.
+                for node in line.n:
+                    node.addXY(coord_dict)
+            else:
+                raise NetworkException('Unhandled data type %s in self.lines' % type(line))
+
+    def addFirstDeparturesToAllLines(self):
+        for line in self.lines:
+            if isinstance(line, str):
+                # then it's just a comment/text line, so pass
+                pass
+            elif isinstance(line, TransitLine):
+                # then we should add coordinates to it.
+                line.setFirstDepartures()
+            else:
+                raise NetworkException('Unhandled data type %s in self.lines' % type(line))
+        
+    def addTravelTimes(self, highway_networks):
+        '''
+        Takes a dict of links_dicts, with one links_dict for each time-of-day
+
+            highway_networks[tod] -> tod_links_dict
+            tod_links_dict[(Anode,Bnode)] -> (distance, streetname, bustime)
+
+        For each TransitLine, sets link travel times.
+        '''
+        for line in self.lines:
+            if isinstance(line, str):
+                # then it's just a comment/text line, so pass
+                pass
+            elif isinstance(line, TransitLine):
+                # then we should add coordinates to it.
+                line.setTravelTimes(highway_networks, self.links)
+            else:
+                raise NetworkException('Unhandled data type %s in self.lines' % type(line))
+    
+##    def writeFastTrips_Network(self, dir, shapes=shapes.txt, stop_times, ):
+##        pass
+
+    def writeFastTrips_Shapes(self, f, writeHeaders=True):
+        '''
+        Iterate each line in this TransitNetwork and write fast-trips style shapes.txt to f
+        '''
+        # check if it's a filename or a file. Open it if it's a filename
+        if isinstance(f, str):
+            f = open(f, 'w')
+        elif isinstance(f, file):
+            if filestream.closed: f = open(f.name)
+
+        # go through lines and write them to f.
+        for line in self.links:
+            if isinstance(line, str):
+                pass
+            elif isinstance(line, TransitLine):
+                line.write_FastTrips_Shape(f, writeHeaders)
+                writeHeaders = False # only write them the with the first line.
+
+    def writeFastTrips_StopTimes(self, f, writeHeaders=True):
+        '''
+        Iterate each line in this TransitNetwork and write fast-trips style stop_times.txt fo f
+        This requires that each line has a complete set of links with ``BUSTIME_<TOD>`` for each
+        <TOD> in ``AM``, ``MD``, ``PM``, ``EV``, ``EA``.
+        '''
+        # check if it's a filename or a file. Open it if it's a filename
+        if isinstance(f, str):
+            f = open(f, 'w')
+        elif isinstance(f, file):
+            if filestream.closed: f = open(f.name)
+
+        id_generator = self.generate_unique_id(range(1,999999))
+        
+        # go through lines and write them to f.
+        for line in self.links:
+            if isinstance(line, str):
+                pass
+            elif isinstance(line, TransitLine):
+                line.write_FastTrips_StopTimes(f, writeHeaders, id_generator)
+                writeHeaders = False # only write them the with the first line.
+                
+    def generate_unique_id(self, seq):
+        """
+        Generator that yields a number from a passed in sequence
+        """
+        for x in seq:
+            yield x
+            
+    def writeFastTrips_Trips():
+        pass
+    
+    def writeFastTrips_FareRules():
+        pass
 
     def findSimpleDwellDelay(self, line):
         """

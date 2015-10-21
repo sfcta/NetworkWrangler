@@ -1,7 +1,9 @@
 import copy
+import itertools
 from .NetworkException import NetworkException
 from .Node import Node
 from .Logger import WranglerLogger
+from .TransitLink import TransitLink
 
 __all__ = ['TransitLine']
 
@@ -14,6 +16,7 @@ class TransitLine(object):
         thisroute['MODE']='5'
 
     """
+    ALL_TIMEPERIODS = ["AM","MD","PM","EV","EA"]
     
     HOURS_PER_TIMEPERIOD = {"AM":3.0, #what about 4-6a?
                             "MD":6.5,
@@ -21,6 +24,14 @@ class TransitLine(object):
                             "EV":8.5,
                             "EA":3.0
                             }
+    
+    MINUTES_PAST_MIDNIGHT = {"AM":360, # 6am - 9am
+                             "MD":540, # 9am - 3:30pm
+                             "PM":930, # 3:30pm - 6:30pm
+                             "EV":1110,# 6:30pm - 3am
+                             "EA":180, # 3am - 6am
+                             }
+    
     MODETYPE_TO_MODES = {"Local":[11,12,16,17,18,19],
                          "BRT":[13,20],
                          "LRT":[14,15,21],
@@ -55,8 +66,10 @@ class TransitLine(object):
                             }
     
     def __init__(self, name=None, template=None):
-        self.attr = {}
+        self.attr = {} # for Cube attributes that will be written to Cube *.lin files.  Not messing with it now because it's baked into the workflow.
+        self.otherattr = {} # for other stuff... departure times, for instance.
         self.n = []
+        self.links = {} # Links were built for supplinks, xfers, but can be extended to all links.  Including here as a way to store stop-stop travel times by time-of-day
         self.comment = None
 
         self.name = name
@@ -72,7 +85,7 @@ class TransitLine(object):
         """
         self.currentStopIdx = 0
         return self
-
+        
     def next(self):
         """
         Method for iterator.  Iterator usage::
@@ -159,6 +172,202 @@ class TransitLine(object):
             return float(self.attr["FREQ[5]"])
         raise NetworkException("getFreq() received invalid timeperiod "+str(timeperiod))
 
+    def setDistances(self, highway_networks, extra_links=None):
+        pass
+    
+    def setTravelTimes(self, highway_networks, extra_links=None):
+        '''
+        Takes a dict of links_dicts, with one links_dict for each time-of-day
+
+            highway_networks[tod] -> tod_links_dict
+            tod_links_dict[(Anode,Bnode)] -> (distance, streetname, bustime)
+
+        Iterates over nodes in this TransitLine, adds sequential pairs to self.links
+        adds travel time as an attribute for each time period.
+
+        extra_links is an optional set of off-road links that may contain travel
+        times.
+        '''
+        for a, b in zip(self.n[:-1],self.n[1:]):
+            a_node = abs(int(a.num)) if isinstance(a, Node) else abs(int(a))
+            b_node = abs(int(b.num)) if isinstance(b, Node) else abs(int(b))
+
+            # get node-pairs and make TransitLinks out of them
+            link_id = '%s,%s' % (a_node, b_node)
+            ##print 'link_id: %s' % link_id
+            link = TransitLink()
+            link.setId(link_id)
+            
+            for tp in TransitLine.ALL_TIMEPERIODS:
+                try:
+                    # is it in the streets network? then get the BUSTIME
+                    hwy_link_attr = highway_networks[tp][(a_node,b_node)]
+                    link['BUSTIME_%s' % tp] = float(hwy_link_attr[2])
+                except:
+                    # if it's not, then try offstreet links
+                    found = False
+                    xyspeed = None
+                    dist = None
+                    for tlink in extra_links:
+                        if isinstance(tlink,TransitLink):
+                            # could be smarter here and look first for (a,b) == (a,b) and then only look for (a,b) == (b,a) if the first isn't found.
+                            if (int(tlink.Anode) == a_node and int(tlink.Bnode) == b_node) or (int(tlink.Anode) == b_node and int(tlink.Bnode) == a_node):
+                                this_link = tlink
+                                upperkeys = []
+                                for key in this_link.keys():
+                                    upperkeys.append(key.upper())
+                                timekey = this_link.keys()[upperkeys.index('TIME')] if 'TIME' in upperkeys else None
+                                distkey = this_link.keys()[upperkeys.index('DIST')] if 'DIST' in upperkeys else None
+                                speedkey = this_link.keys()[upperkeys.index('SPEED')] if 'SPEED' in upperkeys else None
+
+                                if timekey:
+                                    # try to get the TIME first
+                                    link['BUSTIME_%s' % tp] = this_link[timekey]
+                                    found = True
+                                else:
+                                    WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `TIME`" % (self.name, link_id, tp))
+                                    # if no TIME try to get from SPEED and DIST
+                                    if speedkey: xyspeed = float(this_link[speedkey])
+                                    else: WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `SPEED`" % (self.name, link_id, tp))
+                                    if distkey: dist = float(this_link[distkey])
+                                    else: WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `DIST`" % (self.name, link_id, tp))
+                                    if speedkey and distkey:
+                                        WranglerLogger.debug("LINE %s, LINK %s, TOD %s: CALCULATING TRAVEL TIME USING LINK'S DISTANCE AND SPEED" % (self.name, link_id, tp))
+                                        link['BUSTIME_%s' % tp] = (dist / 5280) / xyspeed
+                                        found = True
+                                    else:
+                                        WranglerLogger.debug(repr(this_link))
+                                break
+                    # no off-street link (or it's missing TIME, or SPEED + DIST), then calculate the distance between points
+                    if not found:
+                        import math, geocoder
+                        WranglerLogger.debug("LINE %s, LINK %s, TOD %s: NO ON-STREET OR OFF-STREET LINK FOUND.  CALCULATING TRAVEL TIME MEASURED DISTANCE AND SPEED" % (self.name, link_id, tp))
+                        a_lon, a_lat = self.reproject_to_wgs84(a.x,a.y,EPSG='+init=EPSG:2227')
+                        b_lon, b_lat = self.reproject_to_wgs84(b.x,b.y,EPSG='+init=EPSG:2227')
+                        if not dist: dist = math.sqrt(math.pow((a.x-b.x),2)+math.pow((a.y-b.y),2))
+                        #print a_lon, a_lat, b_lon, b_lat
+                        gdist = geocoder.distance((a_lat,a_lon),(b_lat,b_lon))
+                        if not xyspeed:
+                            try:
+                                # if it's not a link attribute, get it from the line
+                                xyspeed = int(self.attr['XYSPEED'])
+                            except:
+                                # if no speed attribute there, then assume it's 15 mph
+                                WranglerLogger.debug("LINE %s, LINK %s, TOD %s: NO XY-SPEED.  Setting XYSPEED = 15" % (self.name, link_id, tp))
+                                xyspeed = 15
+                        link['BUSTIME_%s' % tp] = (dist / 5280) / xyspeed
+
+            self.links[(a_node,b_node)] = link
+            
+    def setFirstDepartures(self):
+        '''
+        Sets the departure time of the first run of the TransitLine for each time period.
+        Optionally takes a dictionary of time periods to minutes-past-midnight.  Defaults to
+        CHAMP's five time periods.
+        '''                                
+        if self.hasService:
+            all_timeperiods = TransitLine.MINUTES_PAST_MIDNIGHT.keys()
+            for tp in all_timeperiods:
+                headway = self.getFreq(tp)
+                
+                if headway > 0:
+                    time_period_start = TransitLine.MINUTES_PAST_MIDNIGHT[tp]
+                    # TO-DO: ADD IF PREV TP HAS SCHEDULED TIMES, USE THAT RATHER THAN A RANDOM NEW TIME
+                    self.otherattr["DEPT_%s" % tp] = round(self.get_psuedo_random_departure_time(time_period_start, headway),0)
+        else:
+            raise NetworkException("Line %s does not have service, so schedule start times cannot be set" % self.name)
+
+    def get_psuedo_random_departure_time(self, time_period_start, headway, min_start_time = 0):
+        '''
+        Using a normal distribution, computes a pseudo random departure time in number of minutes based on a time window. The
+        time window ranges from a default of 0 to half the headway. From this range, the mean and standard deviation are 
+        calculated and then used as paramaters in the random.normalvariate function. This result is added to time_period_start, 
+        and result is the departure time in number of minutes past midnight. The idea behind this methodology is that first 
+        departures 1) should not all happen at the same time, 2) Indviudal routes should have a first departure time well less than 
+        their headway so that their hourly frequencies are met at most stops, and 3) longer headways (less fequent service) should 
+        have start times farther away from the begining of the time period compared to routes with more frequent service. Item 3
+        is not guaranteed but highly probable.    
+        '''
+        import random
+        # Assume max start time is half the headway for now:
+        max_start_time = headway * .5
+        start_time = max_start_time
+        # Make sure start_time is < max_start_time
+        while start_time >= max_start_time or start_time < 0:
+            mean = (max_start_time + min_start_time)/2
+            # Using 3 because 3 Standard deviatons should account for 99.7% of a population in a normal distribution. 
+            sd = mean/3
+            start_time = random.normalvariate(mean, sd)
+        start_time = start_time + time_period_start 
+        return start_time
+
+    def reproject_to_wgs84(self, longitude, latitude, EPSG = "+init=EPSG:2926", conversion = 0.3048006096012192):
+        '''
+        Converts the passed in coordinates from their native projection (default is state plane WA North-EPSG:2926)
+        to wgs84. Returns a two item tuple containing the longitude (x) and latitude (y) in wgs84. Coordinates
+        must be in meters hence the default conversion factor- PSRC's are in state plane feet.  
+        '''
+        import pyproj
+        # Remember long is x and lat is y!
+        prj_wgs = pyproj.Proj(init='epsg:4326')
+        prj_sp = pyproj.Proj(EPSG)
+        
+        # Need to convert feet to meters:
+        longitude = longitude * conversion
+        latitude = latitude * conversion
+        x, y = pyproj.transform(prj_sp, prj_wgs, longitude, latitude)
+        
+        return x, y
+
+    def writeFastTrips_Shape(self, f, writeHeaders=False):
+        '''
+        Writes fast-trips style shapes record for this line.
+            shape_id, shape_pt_lat, shape_pt_long, shape_pt_sequence, shape_dist_traveled (optional)
+            <string>  <float>       <float>        <integer>          <float>
+        Writes a header if writeHeaders = True
+        '''
+        cum_dist = 0
+        track_dist = True
+        seq = 1
+        if writeHeaders: f.write('shape_id,shape_pt_lat,shape_pt_long,shape_pt_sequence,shape_dist_traveled\n')
+        
+        for a, b in zip(self.n[:-1],self.n[1:]):
+            if not isinstance(a, Node) or not isinstacce(b, Node):
+                ex = "Not all nodes in line %s are type Node" % self.name
+                WranglerLogger.debug(ex)
+                raise NetworkException(ex)
+            else:
+                a_node, b_node = abs(int(a.num)), abs(int(b.num))
+                f.write('%s,%f,%f,%d,%f\n' % (self.name, a.y ,a.x, seq, cum_dist))
+                seq += 1
+                
+            # write the last node
+            f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].y, self.n[-1].x, seq, cum_dist))
+
+    def writeFastTrips_StopTimes(self, f, id_generator, writeHeaders=False):
+        '''
+        Writes fast-trips style stop_times records for this line.
+        Writes a header if writeHeaders = True
+        '''
+        if writeHeaders: f.write('trip_id,arrival_time,departure_time,stop_id,stop_sequence\n')
+
+        for tp in ALL_TIMEPERIODS:        
+            for a, b in zip(self.n[:-1], self.n[1:]):
+                if not isinstance(a, Node) or not isinstance(b, Node):
+                    ex = "Not all nodes in line %s are type Node" % self.name
+                    WranglerLogger.debug(ex)
+                    raise NetworkException(ex)
+                else:
+                    a_node, b_node = abs(int(a.num)), abs(int(b.num))
+                    trip_id = id_generator.next()
+                    ab_link = self.links[(a_node,b_node)]
+                    try:
+                        traveltime = ab_link['BUSTIME_%s' % tp]
+                    except:
+                        WranglerLogger.debug("LINE %s, LINK %s: NO BUSTIME FOUND FOR TP %s" % (self.name, ab_link.id, tp))
+                    #f.write('%d,%d,%d,%d,%d' % (id
+        
+    
     def hasService(self):
         """
         Returns true if any frequency is nonzero.
@@ -297,13 +506,13 @@ class TransitLine(object):
             if node.isStop(): numStops += 1
         return numStops
 
-    def setNodes(self, newnodelist):
+    def setNodes(self, newnodelist, coord_dict=None):
         """
         Given a list of ints representing node numbers,
         converts these to Node types uses this new list, throwing away the previous node list.
         """
         for i in range(len(newnodelist)):
-            if isinstance(newnodelist[i],int): newnodelist[i] = Node(newnodelist[i])
+            if isinstance(newnodelist[i],int): newnodelist[i] = Node(newnodelist[i],coord_dict)
         self.n = newnodelist
     
     def insertNode(self,refNodeNum,newNodeNum,stop=False,after=True):
