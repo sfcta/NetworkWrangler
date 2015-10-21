@@ -332,17 +332,18 @@ class TransitLine(object):
         if writeHeaders: f.write('shape_id,shape_pt_lat,shape_pt_long,shape_pt_sequence,shape_dist_traveled\n')
         
         for a, b in zip(self.n[:-1],self.n[1:]):
-            if not isinstance(a, Node) or not isinstacce(b, Node):
+            if not isinstance(a, Node) or not isinstance(b, Node):
                 ex = "Not all nodes in line %s are type Node" % self.name
                 WranglerLogger.debug(ex)
                 raise NetworkException(ex)
             else:
                 a_node, b_node = abs(int(a.num)), abs(int(b.num))
+                print '%s,%f,%f,%d,%f\n' % (self.name, a.y ,a.x, seq, cum_dist)
                 f.write('%s,%f,%f,%d,%f\n' % (self.name, a.y ,a.x, seq, cum_dist))
                 seq += 1
                 
-            # write the last node
-            f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].y, self.n[-1].x, seq, cum_dist))
+        # write the last node
+        f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].y, self.n[-1].x, seq, cum_dist))
 
     def writeFastTrips_StopTimes(self, f, id_generator, writeHeaders=False):
         '''
@@ -351,22 +352,47 @@ class TransitLine(object):
         '''
         if writeHeaders: f.write('trip_id,arrival_time,departure_time,stop_id,stop_sequence\n')
 
-        for tp in ALL_TIMEPERIODS:        
-            for a, b in zip(self.n[:-1], self.n[1:]):
-                if not isinstance(a, Node) or not isinstance(b, Node):
-                    ex = "Not all nodes in line %s are type Node" % self.name
-                    WranglerLogger.debug(ex)
-                    raise NetworkException(ex)
-                else:
-                    a_node, b_node = abs(int(a.num)), abs(int(b.num))
-                    trip_id = id_generator.next()
-                    ab_link = self.links[(a_node,b_node)]
-                    try:
-                        traveltime = ab_link['BUSTIME_%s' % tp]
-                    except:
-                        WranglerLogger.debug("LINE %s, LINK %s: NO BUSTIME FOUND FOR TP %s" % (self.name, ab_link.id, tp))
-                    #f.write('%d,%d,%d,%d,%d' % (id
-        
+        for tp in TransitLine.ALL_TIMEPERIODS:
+            headway = self.getFreq(tp)
+            if not headway > 0:
+                continue
+            
+            departure = self.otherattr['DEPT_%s' % tp]
+            tp_end = TransitLine.MINUTES_PAST_MIDNIGHT[tp] + TransitLine.HOURS_PER_TIMEPERIOD[tp] * 60
+            while departure < tp_end:
+                cum_time = 0
+                stop_time = departure + cum_time
+                seq = 1
+                trip_id = id_generator.next()
+                for a, b in zip(self.n[:-1], self.n[1:]):
+                    if not isinstance(a, Node) or not isinstance(b, Node):
+                        ex = "Not all nodes in line %s are type Node" % self.name
+                        WranglerLogger.debug(ex)
+                        raise NetworkException(ex)
+                    else:
+                        a_node, b_node = abs(int(a.num)), abs(int(b.num))
+                        ab_link = self.links[(a_node,b_node)]
+                        ##stop_time_hhmmss = int(stop_time/3600)*100000 + int(stop_time) 
+                        try:
+                            traveltime = float(ab_link['BUSTIME_%s' % tp])
+                        except:
+                            WranglerLogger.debug("LINE %s, LINK %s: NO BUSTIME FOUND FOR TP %s" % (self.name, ab_link.id, tp))
+                        rest_time = 0
+                        f.write('%d,%d,%d,%d,%d\n' % (trip_id, stop_time, stop_time, a_node, seq))
+                        try:
+                            cum_time += traveltime
+                            stop_time = departure + cum_time
+                            seq += 1
+                        except:
+                            print cum_time, stop_time, departure, seq
+                departure += headway
+                f.write('%d,%d,%d,%d,%d\n' % (trip_id, stop_time, stop_time, b_node, seq))
+
+##    def writeFastTrips_Trips(self, f, writeHeaders=False):
+##        '''
+##        Writes fast-trips style trips records for this line.
+##        '''
+##        if writeHeaders: f.write('route_id,service_id,trip_id,shape_id')
     
     def hasService(self):
         """
