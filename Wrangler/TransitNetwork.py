@@ -594,6 +594,15 @@ class TransitNetwork(Network):
         return convertedLines, convertedLinks, convertedPNR, convertedZAC, \
             convertedAccessLinki, convertedXferLinki
 
+    def parseAndPrintFareFile(self, faretxt, verbosity=1):
+        success, children, nextcharacter = self.parser.parse(faretxt, production="fare_file")
+        if not nextcharacter==len(trntxt):
+            errorstr  = "\n   Did not successfully read the whole file; got to nextcharacter=%d out of %d total" % (nextcharacter, len(trntxt))
+            errorstr += "\n   Did read %d lines, next unread text = [%s]" % (len(children), trntxt[nextcharacter:nextcharacter+50])
+            raise NetworkException(errorstr)
+        convertedFares = self.parser.convertFareData()
+        return convertedFares
+    
     def parseFile(self, fullfile, insert_replace=True):
         """
         fullfile is the filename,
