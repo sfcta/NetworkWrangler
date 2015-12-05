@@ -1,13 +1,13 @@
 import sys, os, getopt
 sys.path.insert(0,r'Y:\Users\Drew\NetworkWrangler')
 import Wrangler
-from Wrangler.FareParser import FareParser
+#from Wrangler.FareParser import FareParser
 from Wrangler.Fare import Fare, XFFare, ODFare, FarelinksFare
-from Wrangler.FareParser import fare_file_def
+#from Wrangler.FareParser import fare_file_def
 from Wrangler.TransitParser import TransitParser, transit_file_def
 
 
-myfareparser = FareParser(fare_file_def, verbosity=0)
+myfareparser = TransitParser(transit_file_def, verbosity=1)
 
 
 parse_path = r'Q:\Model Development\SHRP2-fasttrips\Task2\network_translation\input_champ_network\freeflow\trn'
