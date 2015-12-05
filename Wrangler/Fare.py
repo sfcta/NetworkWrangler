@@ -1,5 +1,6 @@
 import copy
 import itertools
+import re
 from .NetworkException import NetworkException
 from .Node import Node
 from .Logger import WranglerLogger
@@ -74,9 +75,9 @@ class Fare(object):
     Fare. Behaves like a dictionary of attributes.
     """
     
-    def __init__(self, name=None, price=None, tod=None, transfers=None, transfer_duration=None, start_time=None, end_time=None, template=None):
+    def __init__(self, fare_id=None, price=None, tod=None, transfers=None, transfer_duration=None, start_time=None, end_time=None, template=None):
         self.attr = {}
-        self.name = name
+        self.fare_id = fare_id
 
         # stuff needed for FT
         self.operator           = None
@@ -101,11 +102,22 @@ class Fare(object):
                 raise NetworkException("invalid operator id")
         elif champ_line_name:
             prefix_len = champ_line_name.find('_')
-        
+
+    def set_fare_id(self, fare_id=None, style='fasttrips', index=None):
+        if fare_id:
+            self.fare_id = fare_id
+        else:
+            self.fare_id = 'basic'
+
+        if index:
+            self.fare_id = '%s_%s' % (self.fare_id, str(index))
+            
+        return self.fare_id
+            
     # Dictionary methods
     def __getitem__(self,key): return self.attr[key.upper()]
     def __setitem__(self,key,value): self.attr[key.upper()]=value
-    def __cmp__(self,other): return cmp(self.name,other)
+    def __cmp__(self,other): return cmp(self.fare_id,other)
 
     # String representation: for outputting to line-file
     def __repr__(self):
@@ -113,12 +125,12 @@ class Fare(object):
         return s
 
     def __str__(self):
-        s = '%s, $%2f %s' % (self.name if self.name else "unnamed fare", float(price)/100, self.currency_type)
+        s = '%s, $%2f %s' % (self.fare_id if self.fare_id else "unnamed fare", float(price)/100, self.currency_type)
         return s
 
 class ODFare(Fare):
-    def __init__(self, name=None, from_station=None, to_station=None, price=None, tod=None, start_time=None, end_time=None, template=None, station_lookup=None):
-        Fare.__init__(self, name, price, tod, start_time, end_time, template)
+    def __init__(self, fare_id=None, from_station=None, to_station=None, price=None, tod=None, start_time=None, end_time=None, template=None, station_lookup=None):
+        Fare.__init__(self, fare_id, price, tod, start_time, end_time, template)
         self.fr     = from_station
         self.to     = to_station
         
@@ -129,9 +141,9 @@ class ODFare(Fare):
         pass #s = '' % (
 
 class XFFare(Fare):
-    def __init__(self, name=None, from_mode=None, to_mode=None, price=None, tod=None, transfers=None, transfer_duration=None, start_time=None, end_time=None, template=None):
+    def __init__(self, fare_id=None, from_mode=None, to_mode=None, price=None, tod=None, transfers=None, transfer_duration=None, start_time=None, end_time=None, template=None):
         
-        Fare.__init__(self, name, price, tod, transfers, transfer_duration, start_time, end_time, template)
+        Fare.__init__(self, fare_id, price, tod, transfers, transfer_duration, start_time, end_time, template)
         # stuff from champ
         self.fr     = int(from_mode)
         self.to     = int(to_mode)
@@ -161,32 +173,135 @@ class XFFare(Fare):
             self.fare_class = self.fare_id + '_allday'
 
     def __repr__(self):
-        #s = '%s, %s (%d), %s (%d), %d' % (self.name, self.fr_desc, self.fr, self.to_desc, self.to, self.cost)
+        #s = '%s, %s (%d), %s (%d), %d' % (self.fare_id, self.fr_desc, self.fr, self.to_desc, self.to, self.cost)
         s = '%s, %s, %s, %d' % (self.fare_id, self.fr_desc, self.to_desc, self.price)
         return s
 
     def __str__(self):
-        #s = '%s, %s (%d), %s (%d), %d' % (self.name, self.fr_desc, self.fr, self.to_desc, self.to, self.cost)
+        #s = '%s, %s (%d), %s (%d), %d' % (self.fare_id, self.fr_desc, self.fr, self.to_desc, self.to, self.cost)
         s = '%s, %s, %s, %d' % (self.fare_id, self.fr_desc, self.to_desc, self.price)
         return s
 
 class FarelinksFare(Fare):
-    def __init__(self, name=None, links=None, modes=None, price=None, tod=None, start_time=None, end_time=None, template=None):
-        Fare.__init__(self, name, price, tod, start_time, end_time, template)
-        self.fare_id = 'farelink_%s_%s' % (str(links), str(modes))
+    def __init__(self, fare_id=None, links=None, modes=None, price=None, tod=None, start_time=None, end_time=None, template=None):
+        Fare.__init__(self, fare_id, price, tod, start_time, end_time, template)
+        #self.fare_id = 'farelink_%s_%s' % (str(links), str(modes))
         self.price = int(price)
-        self.modes = modes if isinstance(modes, list) else None
+        if isinstance(modes, list):
+            self.modes = modes
+        else:
+            self.modes = [modes]
+
+        self.farelink = None
+        self.mode = None
         self.farelinks = []
+        self.set_fare_id()
         
         if isinstance(links, list):
             for l in links:
-                link = TransitLink()
-                link.setId(l)
-                self.farelinks.append(link)
+                if isinstance(l, TransitLink):
+                    self.farelinks.append(link)
+                else:
+                    link = TransitLink()
+                    link.setId(l)
+                    self.farelinks.append(link)
+        elif isinstance(links, TransitLink):
+            self.farelinks.append(links)
         else:
             link = TransitLink()
             link.setId(links)
             self.farelinks.append(link)
+
+        if len(self.farelinks)==1:
+            self.farelink = self.farelinks[0]
+        if len(self.modes)==0:
+            self.mode = self.modes[0]
+
+    def isUnique(self):
+        if len(self.farelinks)==1 and len(self.modes)==1:
+            return True
+        else:
+            return False
+                    
+    def set_fare_id(self, fare_id=None, style='fasttrips', index=None):
+        if fare_id:
+            self.fare_id = fare_id
+        else:
+            # count up transit modes
+            i = 0
+            for m in self.modes:
+                if int(m) in TRN_MODE_DICT.keys():
+                    if not TRN_MODE_DICT[int(m)] in NONTRANSIT_TYPES:
+                        i+=1
+                        # if it's a transit mode, grab it in case it's the only one
+                        modepart = TRN_MODE_DICT[int(m)]
+            if i == 1:
+                pass
+            elif i > 1:
+                modepart = 'multimode'
+            elif i == 0:
+                raise NetworkException('FarelinksFare HAS INVALID mode type: %s' % str(self.modes))
+
+            todpart1 = self.convertStringToTimePeriod(self.start_time)
+            todpart2 = self.convertStringToTimePeriod(self.end_time)
+            if todpart1 == todpart2:
+                todpart = todpart1
+            else:
+                todpart = '%s_to_%s' % (todpart1, todpart2)
+
+            if style=='fasttrips':
+                self.fare_id = '%s_%s_zonefare' % (modepart, todpart)
+            elif style=='CHAMP':
+                self.fare_id = '%s_%s_farelink' % (modepart, todpart)
+            else:
+                WranglerLogger.debug("Unknown Fare style %s" % style)
+                self.fare_id = '%s_%s_zonefare' % (modepart, todpart)
+                
+            if index:
+                self.fare_id = '%s_%s' % (self.fare_id, index)
+                
+            return self.fare_id
+
+    def convertStringToTimePeriod(self, hhmmss):
+        if hhmmss == None:
+            tod = 'allday'
+            return tod
+        
+        re_hhmmss = re.compile('\d\d\d\d\d\d')
+        m = re_hhmmss.match(hhmmss)
+        if not m:
+            raise NetworkException('Invalid timestring format for hhmmss: %s' % str(hhmmss))
+        
+        if hhmmss < '030000':
+            tod = 'ev'
+        elif hhmmss < '060000':
+            tod = 'ea'
+        elif hhmmss < '090000':
+            tod = 'am'
+        elif hhmmss < '153000':
+            tod = 'md'
+        elif hhmmss < '183000':
+            tod = 'pm'
+        elif hhmmss < '240000':
+            tod = 'ev'
+        else:
+            new_hh = '%02d' % (int(hhmmss[:2]) - 24)
+            new_hhmmss = new_hh + hhmmss[2:]
+            tod = convertStringToTimePeriod(new_hhmmss)
+        return tod     
+                    
+    def uniqueFarelinksToList(self):
+        '''
+        Create a unique FarelinksFare for each combination of links and modes
+        '''
+        farelist = []
+        
+        for l in self.farelinks:
+            for m in self.modes:
+                newfare = FarelinksFare(links=l, modes=m, price=self.price, tod=self.tod, start_time=self.start_time, end_time=self.end_time)
+                farelist.append(newfare)
+
+        return farelist
 
     def __repr__(self):
         s = '%s, $%.2f, links:' % (self.fare_id, self.price/100)
