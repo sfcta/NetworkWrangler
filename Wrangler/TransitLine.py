@@ -194,7 +194,6 @@ class TransitLine(object):
 
             # get node-pairs and make TransitLinks out of them
             link_id = '%s,%s' % (a_node, b_node)
-            ##print 'link_id: %s' % link_id
             link = TransitLink()
             link.setId(link_id)
             
@@ -225,7 +224,7 @@ class TransitLine(object):
                                     link['BUSTIME_%s' % tp] = this_link[timekey]
                                     found = True
                                 else:
-                                    WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `TIME`" % (self.name, link_id, tp))
+                                    #WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `TIME`" % (self.name, link_id, tp))
                                     # if no TIME try to get from SPEED and DIST
                                     if speedkey: xyspeed = float(this_link[speedkey])
                                     else: WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `SPEED`" % (self.name, link_id, tp))
@@ -476,7 +475,7 @@ class TransitLine(object):
                 return True
             nodeNumPrev = nodeNum
         return False
-    
+
     def hasSegment(self,nodeA,nodeB):
         """
         Returns True iff *nodeA* and *nodeB* appear in this line, and *nodeA* appears before *nodeB*.
@@ -709,6 +708,15 @@ class TransitLine(object):
         if len(self.name)>=11: self.name = self.name[:11]
         self.name = self.name + "R"
         self.n.reverse()
+
+    def getNodeIdx(self, node):
+        node_ids = self.listNodeIds()
+        if isinstance(node, int):
+            return node_ids.index(node)
+        elif isinstance(node, Node):
+            return node_ids.index(int(node.num))
+        else:
+            raise NetworkException("WARNING: Invalid value for node: %s" % str(node))
         
     def _applyTemplate(self, template):
         '''Copy all attributes (including nodes) from an existing transit line to this line'''
