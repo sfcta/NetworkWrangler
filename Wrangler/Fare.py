@@ -67,8 +67,6 @@ OPERATOR_ID_TO_NAME = {'101': "caltrain", '102': "amtrak", '103': "amtrak", '104
                         '84_': "golden_gate_transit",
                         '90_': "ferry", '91_': "ferry", '92_': "ferry", '93_': "ferry", '94_': "ferry", '95_': "ferry",
                         'EBA': "ebart", 'MUN': "sf_muni", 'PRES': "presidigo", 'SFS': "sfsu_shuttle",}
-##BOARDING_MODEPAIRS
-##XFER_MODEPAIRS
 
 class Fare(object):
     """
@@ -145,12 +143,12 @@ class XFFare(Fare):
         
         Fare.__init__(self, fare_id, price, tod, transfers, transfer_duration, start_time, end_time, template)
         # stuff from champ
-        self.fr     = int(from_mode)
-        self.to     = int(to_mode)
-        self.fr_desc = TRN_MODE_DICT[self.fr]['desc']
-        self.to_desc = TRN_MODE_DICT[self.to]['desc']
-        self.fr_type = TRN_MODE_DICT[self.fr]['type']
-        self.to_type = TRN_MODE_DICT[self.to]['type']
+        self.fr_mode  = int(from_mode)
+        self.to_mode    = int(to_mode)
+        self.fr_desc = TRN_MODE_DICT[self.fr_mode]['desc']
+        self.to_desc = TRN_MODE_DICT[self.to_mode]['desc']
+        self.fr_type = TRN_MODE_DICT[self.fr_mode]['type']
+        self.to_type = TRN_MODE_DICT[self.to_mode]['type']
         
         if self.fr_type in NONTRANSIT_TYPES and self.to_type in TRANSIT_TYPES:
             self.type = 'board'
@@ -172,6 +170,21 @@ class XFFare(Fare):
         else:
             self.fare_class = self.fare_id + '_allday'
 
+    def isBoardType(self):
+        if self.fr_type in NONTRANSIT_TYPES and self.to_type not in NONTRANSIT_TYPES:
+            return True
+        return False
+    
+    def isTransferType(self):
+        if self.fr_type not in NONTRANSIT_TYPES and self.to_type not in NONTRANSIT_TYPES:
+            return True
+        return False
+
+    def isExitType(self):
+        if self.fr_type not in NONTRANSIT_TYPES and self.to_type in NONTRANSIT_TYPES:
+            return True
+        return False
+    
     def __repr__(self):
         #s = '%s, %s (%d), %s (%d), %d' % (self.fare_id, self.fr_desc, self.fr, self.to_desc, self.to, self.cost)
         s = '%s, %s, %s, %d' % (self.fare_id, self.fr_desc, self.to_desc, self.price)
