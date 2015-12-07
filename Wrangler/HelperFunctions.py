@@ -39,9 +39,16 @@ def boilDown(numbers, left_split, right_split):
     overlap1 = getListOverlap(numbers, left_split)
     overlap2 = getListOverlap(numbers, right_split)
     for x in overlap1:
-        if x not in sets: sets.append(x)
+        if x not in sets and len(x) > 0: sets.append(x)
+    for x in overlap2:
+        if x not in sets and len(x) > 0: sets.append(x)
     return sets
 
+def isSubset(subset, fullset):
+    for i in subset:
+        if i not in fullset:
+            return False
+    return True
 def removeDuplicatesFromList(l):
     this_list = copy.deepcopy(l)
     for x in this_list:
