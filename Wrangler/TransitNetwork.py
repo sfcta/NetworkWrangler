@@ -59,6 +59,8 @@ class TransitNetwork(Network):
         self.od_fares        = []
         self.xf_fares        = []
         self.farelinks_fares = []
+        self.zone_to_nodes = {}
+        self.node_to_zone = {}
 
         for farefile in TransitNetwork.FARE_FILES:
             self.farefiles[farefile] = []
@@ -875,8 +877,49 @@ class TransitNetwork(Network):
         # boundaries.  This is necessary because fare_rules are unique on
         # route_id, origin_id, destination_id
         # ... should also add origin_id and destination_id to lines
-        pass
-    
+        for line in self.lines:
+            for farelink in self.farelinks_fares:
+                if isinstance(farelink, FarelinksFare):
+                    if farelink.isUnique():
+                        if line.hasLink(int(farelink.link.Anode),int(farelink.link.Bnode)):
+                            line.farelinks.append(farelink)
+
+    def crossesWall(self, nodes, left_wall, right_wall):
+        junk, junk, overlap1 = getListOverlap(nodes, left_wall)
+        junk, junk, overlap2 = getListOverlap(nodes, right_wall)
+        if len(overlap1) > 0 and len(overlap2) > 0:
+            return True
+        else:
+            return False
+
+    def addAndSplitZoneList(self, zone_list, left_nodes, right_nodes):
+        if len(zone_list) == 0:
+            zone_list.append(left_nodes)
+            zone_list.append(right_nodes)
+            return zone_list
+        for nodeset in zone_list:
+            idx = zone_list.index(nodeset)
+            newsets = boilDown(nodeset,left_nodes,right_nodes)
+            if len(newsets) > 1:
+                zone_list.remove(nodeset)
+            for newset in newsets:
+                if len(newset) == 0:
+                    WranglerLogger.warn("GOT ZERO LENGTH LIST")
+                    continue
+                if newset not in zone_list:
+                    for set in zone_list:
+                        if isSubset(newset, set):
+                            newset = []
+                            break
+                            # don't add, it's already there
+                        #elif isSubset(set, newset):
+                        else:
+                            left, newset, overlap = getListOverlap(set, newset)
+                            # add just the part that's missing
+                    if len(newset) > 0: zone_list.insert(idx, newset)
+                idx += 1
+        return zone_list
+                                
     def createZoneIDsFromFares(self):
         # Start with Farelinks
         # gather up sets of left_nodes, right_nodes for each link
@@ -884,6 +927,8 @@ class TransitNetwork(Network):
         id_generator = generate_unique_id(range(1,999999))
         zone_to_nodes = {}
         link_counter = 0
+        zone_list = []
+        all_nodes = []
         
         for fare in self.farelinks_fares:
             if isinstance(fare, FarelinksFare):
@@ -894,100 +939,42 @@ class TransitNetwork(Network):
                     if len(left_nodes) == 0 and len(right_nodes) == 0: continue
                     left_nodes.sort()
                     right_nodes.sort()
-                    walls.append((left_nodes,right_nodes))
-                    
-                    if len(zone_to_nodes) == 0:
-                        zone_to_nodes[id_generator.next()] = left_nodes
-                        zone_to_nodes[id_generator.next()] = right_nodes
-                    else:
-                        # pass through list and build up zones as big as possible
-                        # before breaking them back down
-                        left_used = False
-                        right_used = False
-                        for node_list in zone_to_nodes.values():
-                            left1,right1,overlap1 = getListOverlap(node_list,left_nodes)
-                            left2,right2,overlap2 = getListOverlap(node_list,right_nodes)
-                            
-                            if len(overlap1) > 0 and len(overlap2) > 0:
-                                pass
-                                #overlaps both sides, so can't reliably add nodes to zone
-                                # just do the left ones...
-##                                left_used = True
-##                                for r in right1:
-##                                    node_list.append(r)
-##                                continue
-                            if len(overlap1) > 0:
-                                left_used = True
-                                for r in right1:
-                                    node_list.append(r)
-                            if len(overlap2) > 0:
-                                right_used = True
-                                for r in right2:
-                                    node_list.append(r)
-                        if not left_used: zone_to_nodes[id_generator.next()] = left_nodes
-                        if not right_used: zone_to_nodes[id_generator.next()] = right_nodes
-        # now done building up zones, time to break them down at their walls
-        WranglerLogger.debug("NUMBER OF ZONES: %d" % len(zone_to_nodes))
-        node_overlap = {}
-        for node_list in zone_to_nodes.values():
-            for n in node_list:
-                if n in node_overlap.keys():
-                    node_overlap[n] += 1
-                else:
-                    node_overlap[n] = 1
-        overlapped = 0
-        for node, count in node_overlap.iteritems():
-            if count > 1: overlapped += 1
-        WranglerLogger.debug("PERCENT OF NODES IN MULTIPLE ZONES: %f" % float(float(overlapped)/float(len(node_overlap))))
-        raw_input("press enter")
-        for key, value in zone_to_nodes.iteritems():
-            print "%s (%d nodes):    %s" % (str(key), len(value), str(value))
-        raw_input("press enter")
-        for zone, node_list in zone_to_nodes.iteritems():
-            walls_crossed = 0
-            for wall in walls:
-                (left_wall, right_wall) = wall
-                left1,right1,overlap1 = getListOverlap(node_list,left_wall)
-                left2,right2,overlap2 = getListOverlap(node_list,right_wall)
-                if len(overlap1) > 0 and len(overlap2) > 0:
-                    walls_crossed += 1
-            print "zone %d: %d walls crossed" % (zone, walls_crossed)
-        raw_input("press enter")
-                
-                             
-##        for node_list in zone_to_nodes.values():
-##            for wall in walls:
-##                # does this zone cross a wall? if so...
-##                
-##                        # [2,3,4]  (| [5,6]) ... [1,2,3] | [4,5]
-##                        # now time to break the zones down
-##                                                    
-##                else:
-##                    raise NetworkException("WARNING: trying to add non-unique Farelinks Fare")
-            
-        # UNFINISHED
-##        # Algorithm:    Iterate over lines
-##        #                   for each line, get initial board from XFFares (xfer.fare)
-##        #                   next, check if nodes are in ODFares.  If ANY node in ODFares,
-##        #                       then ALL nodes should be.  Move on.  ODFares will be handled
-##        #                       separately.
-##        #                   next, walk over the links in the transit line.  Check links against
-##        #                       farelinks.  If farelink is crossed, then increment the zoneID by
-##        #                       one and assign the new zoneID until next farelink is crossed.
-##        #                       The rule will be:
-##        #                           --fare_rules.txt--
-##        #                           route_id = BLANK, origin_id = orig_node_, destination_id
-##        #
-        # A stop gets a ZoneID if it is included in a zone system for ANY transit operator. If
-        # two operators have overlapping zones, then the resulting zone system will 
-        # Create ZoneIDs from OD Fares.  These will be specific to operator and OD node numbers.
+                    for n in left_nodes:
+                        if n not in all_nodes: all_nodes.append(n)
+                    for n in right_nodes:
+                        if n not in all_nodes: all_nodes.append(n)
+                        
+                    zone_list = self.addAndSplitZoneList(zone_list, left_nodes, right_nodes)
 
-        # Create ZoneIDs from Farelinks Fares.  These will be specific to operator and side of Farelink.
-        # This will require, for each Farelink, all the lines that cross it with the given transit mode.
-##    def createZonesFromFarelinks(self):
-##        for link in self.farelinks:
-##            pass
-                               
+        found_nodes = []
+        
+        for nodes in zone_list:
+            id = id_generator.next()
+            zone_to_nodes[id] = nodes
+            for n in nodes:
+                if n not in found_nodes: found_nodes.append(n)
+            ##WranglerLogger.debug("ZONE %d, NODES: %d" % (id, len(nodes)))
+        WranglerLogger.debug("EXPECT %d TOTAL NODES" % len(all_nodes))
+        WranglerLogger.debug("FOUND %d TOTAL NODES" % len(found_nodes))
+        missing_nodes, junk, junk = getListOverlap(all_nodes, found_nodes)
+
+        node_to_zone = {}
+        for zone, nodes in zone_to_nodes.iteritems():
+            for n in nodes:
+                if n in node_to_zones.keys():
+                    WranglerLogger.warn("DUPLICATE ZONE-NODE PAIR for NODE %d" % n)
+                node_to_zone[n] = zone
+
+        self.zone_to_nodes = zone_to_nodes
+        self.node_to_zone = node_to_zone
+        return zone_to_nodes
+    
+    def addFaresToLines(self, node_to_zone=None):
+        for line in self.lines:
+            if isinstance(line, TransitLine):
+                pass
+                
+        
     def writeFastTrips_Stops(self,f_stops='stops.txt',f_stops_ft='stops_ft.txt'):
         # UNFINISHED
         # MAY NEED TO KNOW ZONES, WHICH WILL COME FROM ODFARES
