@@ -813,10 +813,7 @@ class TransitLine(object):
     # Dictionary methods
     def __getitem__(self,key): return self.attr[key.upper()]
     def __setitem__(self,key,value): self.attr[key.upper()]=value
-    def __cmp__(self,other):
-        if not isinstance(other, TransitLine): return False
-        return self.__dict__ == other.__dict__
-    
+    def __cmp__(self,other): return cmp(self.name,other)
 
     # String representation: for outputting to line-file
     def __repr__(self):
