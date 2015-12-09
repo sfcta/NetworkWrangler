@@ -961,7 +961,7 @@ class TransitNetwork(Network):
         node_to_zone = {}
         for zone, nodes in zone_to_nodes.iteritems():
             for n in nodes:
-                if n in node_to_zones.keys():
+                if n in node_to_zone.keys():
                     WranglerLogger.warn("DUPLICATE ZONE-NODE PAIR for NODE %d" % n)
                 node_to_zone[n] = zone
 
@@ -1004,7 +1004,7 @@ class TransitNetwork(Network):
         fare_transfer_rules:
                     from_fare_class, to_fare_class, is_flat_fee, transfer_rule
         fare_attributes.txt:
-                    fare_id, price, currency_type, paymoent_method, transfers, transfer_duration
+                    fare_id, price, currency_type, payment_method, transfers, transfer_duration
 
         Logic:
             1. route_id, origin_id, destination_id -> look up fare_id
