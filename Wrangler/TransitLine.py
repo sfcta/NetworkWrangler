@@ -71,7 +71,8 @@ class TransitLine(object):
         self.n = []
         self.links = {} # Links were built for supplinks, xfers, but can be extended to all links.  Including here as a way to store stop-stop travel times by time-of-day
         self.comment = None
-
+        self.board_price = None
+        self.farelinks = []
         self.name = name
         if name and name.find('"')==0:
             self.name = name[1:-1]  # Strip leading/trailing dbl-quotes
@@ -85,7 +86,7 @@ class TransitLine(object):
         """
         self.currentStopIdx = 0
         return self
-        
+
     def next(self):
         """
         Method for iterator.  Iterator usage::
@@ -174,7 +175,92 @@ class TransitLine(object):
 
     def setDistances(self, highway_networks, extra_links=None):
         pass
-    
+
+    def addZones(self, node_to_zone):
+        for n in self.n:
+            if n in node_to_zone.keys():
+                self.node_to_zone[n] = node_to_zone[n]
+            else:
+                self.node_to_zone[n] = n
+                
+    def addFares(self, od_fares = None, xf_fares=None, farelinks_fares=None):
+        modenum = int(self.attr['MODE'])
+        if od_fares:
+            pass
+        
+        if xf_fares:
+            for fare in xf_fares:
+                if isinstance(fare,XFFare):
+                    if fare.to_mode == modenum and fare.isBoardType():
+                        self.board_price    = fare.price
+                        self.board_fare_id  = fare.fare_id
+                        WranglerLogger.debug("ADDED FARE %s ($%2f) TO LINE %s" % (self.board_fare_id, float(self.board_price)/100, self.name))
+        if farelinks_fares:
+            for fare in farelinks_fares:
+                if isinstance(fare,FarelinksFare):
+                    if fare.isUnique():
+                        if self.hasLink(fare.farelink.Anode, fare.farelink.Bnode):
+                            self.farelinks.append(fare)
+                            WranglerLogger.debug("ADDED FARELINK %s ($%2f) TO LINE %s" % (fare.fare_id, float(self.board_price)/100, self.name))
+
+    def hasFarelinks(self):
+        for fare in self.farelinks:
+            if isinstance(fare, FarelinksFare): return True
+        return False
+
+    def getStopList(self, style='int'):
+        style = style.lower()
+        stops = []
+        if style not in ['int','node']: raise NetworkException("INVALID STYLE.  MUST BE 'int' OR 'node'")
+        if style=='int':
+            for n in self.n:
+                if isinstance(n, int) or isinstance(n, str):
+                    if n > 0: stops.append(int(n))
+                elif isinstance(n, Node):
+                    if n.isStop(): stops.append(int(n.num))
+                else:
+                    raise NetworkException("UNKNOWN DATA TYPE FOR NODE (%s): %s" % (type(n), str(n)))
+
+    def getNodeSequenceAsInt(self):
+        nodes = []
+        for n in self.n:
+            if isinstance(n, int) or isinstance(n, str):
+                nodes.append(int(n))
+            elif isinstance(n, Node):
+                nodes.append(int(n.num))
+            else:
+                raise NetworkException("UNKNOWN DATA TYPE FOR NODE (%s): %s" % (type(n), str(n)))
+            
+    def getFastTrips_FareRules_asList(self):
+        # walk the nodes
+        rules = []
+        rule = {'fare_id':None,'origin_id':None,'destination_id':None,'contains_id':None,
+                'fare_class':None,'start_time':None,'end_time':None,'price':None}
+
+        nodes = self.getNodeSequenceAsInt()
+        idx = 0
+        while idx < len(nodes):
+            start_node = nodes[idx]
+            origin_id = node_to_zone[start_node] if start_node in self.node_to_zone.keys() else start_node
+
+            cost_increment = 0
+            last_rule = None
+            for a, b in zip(nodes[idx:-1],nodes[idx+1]):
+                if self.hasFarelinks():
+                    for fare in self.farelinks:
+                        if isinstance(fare, FarelinksFare):
+                            if (a,b) == (int(fare.farelink.Anode), int(fare.farelink.Bnode)):
+                                cost_increment += fare.price
+                                ##rule['fare_id'] = fare.fare_id
+                rule['origin_id']       = node_to_zone[a] if a in node_to_zone.keys() else None
+                rule['destination_id']  = node_to_zone[b] if b in node_to_zone.keys() else None
+                rule['price']           = self.board_price + cost_increment
+                rule['start_time']      = fare.start_time
+                if rule != last_rule:
+                    rules.append(rule)
+
+                last_rule = copy.deepcopy(rule)
+                
     def setTravelTimes(self, highway_networks, extra_links=None):
         '''
         Takes a dict of links_dicts, with one links_dict for each time-of-day
@@ -727,7 +813,10 @@ class TransitLine(object):
     # Dictionary methods
     def __getitem__(self,key): return self.attr[key.upper()]
     def __setitem__(self,key,value): self.attr[key.upper()]=value
-    def __cmp__(self,other): return cmp(self.name,other)
+    def __cmp__(self,other):
+        if not isinstance(other, TransitLine): return False
+        return self.__dict__ == other.__dict__
+    
 
     # String representation: for outputting to line-file
     def __repr__(self):
