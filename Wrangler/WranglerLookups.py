@@ -7,9 +7,9 @@ class WranglerLookups:
                         5:{'desc':"transfer", 'type':"non-transit"},
                         6:{'desc':"drive funnel", 'type':"non-transit"},
                         7:{'desc':"walk funnel", 'type':"non-transit"},
-                        8:{'desc':"empty", 'type':""},
-                        9:{'desc':"empty", 'type':""},
-                        10:{'desc':"empty", 'type':""},
+                        8:{'desc':None, 'type':None},
+                        9:{'desc':None, 'type':None},
+                        10:{'desc':None, 'type':None},
                         11:{'desc':"Local Muni", 'type':"local bus"},
                         12:{'desc':"Express Muni", 'type':"local bus"},
                         13:{'desc':"BRT Muni", 'type':"local bus"},
@@ -34,8 +34,15 @@ class WranglerLookups:
                         32:{'desc':"BART", 'type':"BART"},
                         }
 
-    NONTRANSIT_TYPES    = ['non-transit','']
+    ACCESS_MODES        = [1,3,6,7]
+    EGRESS_MODES        = [2,4]
+    TRANSFER_MODES      = [5]
+    UNUSED_MODES        = [8,9,10]
+    NONTRANSIT_MODES    = [1,2,3,4,5,6,7,8,9,10]
+    TRANSIT_MODES       = [11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]
+    NONTRANSIT_TYPES    = ['non-transit']
     TRANSIT_TYPES       = ['local bus', 'LRT', 'BRT', 'Premium', 'Ferry', 'BART']
+    
     OPERATOR_ID_TO_NAME = {'101_': "caltrain", '102_': "amtrak", '103_': "amtrak", '104_': "ace",
                            '105_': "dumbarton", '106_': "smart", '107_': "bart", '108_': "bart",
                            '100_': "bart", '10_': "west_berkeley_shuttle", '11_': "broadway_shuttle",
