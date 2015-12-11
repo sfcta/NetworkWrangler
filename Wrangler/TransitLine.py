@@ -278,41 +278,52 @@ class TransitLine(object):
         rule = None
         origin_id, destination_id = None, None
         price = self.board_fare.price
-        nodes = self.getNodeSequenceAsInt()
-
-##        if self.hasFarelinks():
-##            WranglerLogger.debug("LINE %s HAS FARELINKS" % str(self.name))
-##            WranglerLogger.debug('node_to_zone: %s' % str(self.node_to_zone))
-##            WranglerLogger.debug('nodes:        %s' % str(nodes))
+        nodes = self.getNodeSequenceAsInt(ignoreStops=False)
 
         idx = 0
-        for idx in range(len(nodes)):
-            start_node = nodes[idx]
-            origin_id = self.node_to_zone[start_node] if start_node in self.node_to_zone.keys() else start_node
-
-            cost_increment = 0
+        if self.hasFarelinks():
+            
             last_rule = None
-            for a, b in zip(nodes[idx:-1],nodes[idx+1:]):
-                if self.hasFarelinks():
-                    origin_id       = self.node_to_zone[a] #if a in self.node_to_zone.keys() else None
-                    destination_id  = self.node_to_zone[b] #if b in self.node_to_zone.keys() else None
+            stop_a = None
+            stop_b = None
+            
+            for a, idx in zip(nodes[:-1],range(len(nodes[:-1]))):
+                # iterate over all origins
+                if a > 0:
+                    # if it's a stop, get the zone and reset the stop increment.
+                    stop_a          = a
+                    origin_id       = self.node_to_zone[stop_a]
+                    cost_increment  = 0
+                    stop_b          = None
+                else:
+                    continue # don't care about nodes that aren't stops.
+                
+                for _b, b in zip(nodes[idx:-1],nodes[idx+1:]):
+                    # iterate over destinations.  b is the dest, (_b,b) is the link, to check for farelinks                        
                     for fare in self.farelinks:
                         if isinstance(fare, FarelinksFare):
-                            if (a,b) == (int(fare.farelink.Anode), int(fare.farelink.Bnode)):
+                            # if this link is a farelink, increment the price by the cost on the farelink.
+                            if (abs(_b),abs(b)) == (int(fare.farelink.Anode), int(fare.farelink.Bnode)):
                                 cost_increment += fare.price
                                 price = self.board_fare.price + cost_increment
                                 # WranglerLogger.debug("COST INCREMENT ON LINE %s to $%.2f between %s and %s" % (self.name, float(price)/100, str(origin_id), str(destination_id)))
-                else:
-                    # origin_id and destination_id only matter for lines that cross farelinks.
-                    origin_id       = None
-                    destination_id  = None
-                if price > 0: rule = FastTripsFare(champ_line_name = self.name,price=price,origin_id=origin_id,destination_id=destination_id)
-                if rule:
+
+                    if b > 0:
+                        stop_b          = b
+                        destination_id  = self.node_to_zone[stop_b]
+                        rule = FastTripsFare(champ_line_name = self.name,price=price,origin_id=origin_id,destination_id=destination_id)
+                    else:
+                        continue
+                    if rule == last_rule: continue
                     if rule not in rules:
                         rules.append(rule)
-                        #WranglerLogger.debug('%s' % str(rule))
-
-                last_rule = copy.deepcopy(rule)
+                    last_rule = copy.deepcopy(rule)
+        else:
+            # origin_id and destination_id only matter for lines that cross farelinks.
+            origin_id       = None
+            destination_id  = None
+            rule = FastTripsFare(champ_line_name=self.name,price=self.board_fare.price,origin_id=origin_id,destination_id=destination_id)
+            rules.append(rule)
                 
         return rules
                 
