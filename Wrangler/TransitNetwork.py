@@ -43,24 +43,19 @@ class TransitNetwork(Network):
         """
         Network.__init__(self, champVersion, networkBaseDir, networkProjectSubdir, networkSeedSubdir,
                          networkPlanSubdir, networkName)
-        self.lines = []
-        #note self.links is transit support links, i.e. stuff in muni.link, caltrain.link, etc.
-        self.links = []
-        self.pnrs   = []
-        self.zacs   = []
-        self.accessli = []
-        self.xferli   = []
-        # self.farefiles is for storing the contents of fare files verbatim so they can
-        # be copied over directly.  No Fare object functionality.
-        # Should be removed in the future when full Fare functionality is implemented.
-        self.farefiles = {} # farefile name -> [ lines in farefile ]
-        # od_fares, xf_fares, and farelinks_fares store Fare objects which were added
-        # for implementing fast-trips conversion compatibility
-        self.od_fares        = []
-        self.xf_fares        = []
-        self.farelinks_fares = []
-        self.zone_to_nodes = {}
-        self.node_to_zone = {}
+        
+        self.lines              = []
+        self.links              = []    # note self.links is transit support links, i.e. stuff in muni.link, caltrain.link, etc.
+        self.pnrs               = []
+        self.zacs               = []
+        self.accessli           = []
+        self.xferli             = []
+        self.farefiles          = {}    # farefile name -> [ lines in farefile ]
+        self.od_fares           = []    # added for fast-trips
+        self.xf_fares           = []    # added for fast-trips
+        self.farelinks_fares    = []    # added for fast-trips
+        self.zone_to_nodes      = {}    # added for fast-trips
+        self.node_to_zone       = {}    # added for fast-trips
 
         for farefile in TransitNetwork.FARE_FILES:
             self.farefiles[farefile] = []

@@ -40,20 +40,19 @@ FT_OUTPATH  = r'Q:\Model Development\SHRP2-fasttrips\Task2\network_translation\t
 #FT_OUTPATH = os.path.curdir
 CHAMP_NODE_NAMES = r'Y:\champ\util\nodes.xls'
 
-SHAPES      = os.path.join(FT_OUTPATH,'shapes.txt')
-TRIPS       = os.path.join(FT_OUTPATH,'trips.txt')
-STOP_TIMES  = os.path.join(FT_OUTPATH,'stop_times.txt')
-FARES       = os.path.join(FT_OUTPATH,'dumb_fares.txt')
-    
 if __name__=='__main__':
-    test=False
+    test=True
     ask_raw_input=False
     # set up logging
     NOW = time.strftime("%Y%b%d.%H%M%S")
     FT_OUTPATH = os.path.join(FT_OUTPATH,NOW)
+    SHAPES      = os.path.join(FT_OUTPATH,'shapes.txt')
+    TRIPS       = os.path.join(FT_OUTPATH,'trips.txt')
+    STOP_TIMES  = os.path.join(FT_OUTPATH,'stop_times.txt')
+    FARES       = os.path.join(FT_OUTPATH,'dumb_fares.txt')
     if not os.path.exists(FT_OUTPATH): os.mkdir(FT_OUTPATH)
                                                                       
-    LOG_FILENAME = "convert_cube_to_fasttrips_%s.info.LOG" % NOW
+    LOG_FILENAME = os.path.join(FT_OUTPATH,"convert_cube_to_fasttrips_%s.info.LOG" % NOW)
     Wrangler.setupLogging(LOG_FILENAME, LOG_FILENAME.replace("info", "debug"))
     os.environ['CHAMP_NODE_NAMES'] = CHAMP_NODE_NAMES
     highway_networks = {}
@@ -104,7 +103,7 @@ if __name__=='__main__':
         ntz.write('node,type,zone,type\n')
         for zone, nodes in zone_to_nodes.iteritems():
             for this_node in nodes:
-                ntz.write('%s,%s\n' % (str(this_node),type(this_node),str(zone),type(zone)))
+                ntz.write('%s,%s,%s,%s\n' % (str(this_node),type(this_node),str(zone),type(zone)))
             overlap_list = []
             for nodes2 in zone_to_nodes.values():
                 for n in nodes:
