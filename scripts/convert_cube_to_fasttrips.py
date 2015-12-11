@@ -7,6 +7,7 @@ from Wrangler.Logger import WranglerLogger
 from Wrangler.TransitNetwork import TransitNetwork
 from Wrangler.TransitLink import TransitLink
 from Wrangler.TransitLine import TransitLine
+from Wrangler.HelperFunctions import *
 #from Wrangler.FareParser import FareParser, fare_file_def  # should probably be moved into TransitNetwork.
 from Wrangler.Fare import ODFare, XFFare, FarelinksFare
 
@@ -39,8 +40,14 @@ FT_OUTPATH  = r'Q:\Model Development\SHRP2-fasttrips\Task2\network_translation\t
 #FT_OUTPATH = os.path.curdir
 CHAMP_NODE_NAMES = r'Y:\champ\util\nodes.xls'
 
+SHAPES      = os.path.join(FT_OUTPATH,'shapes.txt')
+TRIPS       = os.path.join(FT_OUTPATH,'trips.txt')
+STOP_TIMES  = os.path.join(FT_OUTPATH,'stop_times.txt')
+FARES       = os.path.join(FT_OUTPATH,'dumb_fares.txt')
     
 if __name__=='__main__':
+    test=False
+    ask_raw_input=False
     # set up logging
     NOW = time.strftime("%Y%b%d.%H%M%S")
     FT_OUTPATH = os.path.join(FT_OUTPATH,NOW)
@@ -65,34 +72,61 @@ if __name__=='__main__':
     # Get transit network
     transit_network = TransitNetwork(5.0)
     transit_network.mergeDir(TRN_BASE)
-    print "creating zone ids"
+    WranglerLogger.debug("Making FarelinksFares unique")
+    transit_network.makeFarelinksUnique()
+    WranglerLogger.debug("Adding station names to OD Fares")
+    nodeNames = getChampNodeNameDictFromFile(os.environ["CHAMP_node_names"])
+    transit_network.addStationNamestoODFares(nodeNames)
+    WranglerLogger.debug("creating zone ids")
     zone_to_nodes = transit_network.createZoneIDsFromFares()
-    for zone, nodes in zone_to_nodes.iteritems():
-        overlap_list = []
-        for nodes2 in zone_to_nodes.values():
-            for n in nodes:
-                if n in nodes2 and nodes != nodes2 and n not in overlap_list: overlap_list.append(n)
-                
-        WranglerLogger.debug("ZONE: %d HAS %d of %d NODES OVERLAP WITH OTHER ZONES" % (zone, len(overlap_list), len(nodes)))
-        #WranglerLogger.debug("%s" % str(overlap_list))
-    raw_input("enter.")
-    ##raw_input("Merge transit directory successful.\npress Enter to continue")
-    print "adding xy to Nodes"
+    WranglerLogger.debug("adding xy to Nodes")
     transit_network.addXY(nodes_dict)
-    print "adding first departure times to all lines"
+    WranglerLogger.debug("adding first departure times to all lines")
     transit_network.addFirstDeparturesToAllLines()
-    print "adding travel times to all lines"
+    WranglerLogger.debug("adding travel times to all lines")
     transit_network.addTravelTimes(highway_networks)
-    print "writing lines to shapes.txt"
-    transit_network.writeFastTrips_Shapes('shapes.txt')
-    print "writing stop times to stop_times.txt"
-    transit_network.writeFastTrips_Trips('trips.txt','stop_times.txt')
-    print "writing routes, stops, and fares"
-    transit_network.writeFastTrips_RoutesStopsFares('stops.txt','routes.txt','routes_ft.txt','fare_rules.txt','fare_rules_ft.txt','fare_attributes.txt','fare_attributes_ft.txt','fare_transfer_rules.txt')
+    WranglerLogger.debug("adding fares to lines")
+    transit_network.addFaresToLines()
+    transit_network.createLineLevelFares()
+    WranglerLogger.debug("writing lines to shapes.txt")
+    transit_network.writeFastTrips_Shapes(SHAPES)
+    WranglerLogger.debug("writing stop times to stop_times.txt")
+    transit_network.writeFastTrips_Trips(TRIPS,STOP_TIMES)
+    WranglerLogger.debug("writing routes, stops, and fares")
+    transit_network.writeFastTripsFares_dumb(FARES)
+    #transit_network.writeFastTrips_RoutesStopsFares('stops.txt','routes.txt','routes_ft.txt','fare_rules.txt','fare_rules_ft.txt','fare_attributes.txt','fare_attributes_ft.txt','fare_transfer_rules.txt')
 
-    test=False
     if test:
         print "testing"
+
+        node_to_zone_file = 'node_to_zone_file_%s.log' % NOW
+        ntz = open(node_to_zone_file,'w')
+        ntz.write('node,type,zone,type\n')
+        for zone, nodes in zone_to_nodes.iteritems():
+            for this_node in nodes:
+                ntz.write('%s,%s\n' % (str(this_node),type(this_node),str(zone),type(zone)))
+            overlap_list = []
+            for nodes2 in zone_to_nodes.values():
+                for n in nodes:
+                    if n in nodes2 and nodes != nodes2 and n not in overlap_list: overlap_list.append(n)        
+            WranglerLogger.debug("ZONE: %d HAS %d of %d NODES OVERLAP WITH OTHER ZONES" % (zone, len(overlap_list), len(nodes)))
+            #WranglerLogger.debug("%s" % str(overlap_list))
+        if ask_raw_input: raw_input("Reporting Fares Parsed (XFFares) press enter to proceed.")
+        WranglerLogger.debug("Reporting Fares Parsed (XFFares) press enter to proceed.")
+        for xf_fare in transit_network.xf_fares:
+            if isinstance(xf_fare,XFFare): WranglerLogger.debug('%s' % str(xf_fare))
+        if ask_raw_input: raw_input("Reporting Fares Parsed (ODFares) press enter to proceed.")
+        WranglerLogger.debug("Reporting Fares Parsed (ODFares) press enter to proceed.")
+        for od_fare in transit_network.od_fares:
+            if isinstance(od_fare,ODFare): WranglerLogger.debug('%s' % str(od_fare))
+        if ask_raw_input: raw_input("Reporting Fares Parsed (FarelinksFares) press enter to proceed.")
+        WranglerLogger.debug("Reporting Fares Parsed (FarelinksFares) press enter to proceed.")
+        for farelinks_fare in transit_network.farelinks_fares:
+            if isinstance(farelinks_fare,FarelinksFare):
+                WranglerLogger.debug('%s' % str(farelinks_fare))
+        if ask_raw_input: raw_input("done reporting Fares.")
+
+
         outfile = open(os.path.join(FT_OUTPATH,'links.csv'),'w')
         #print "NUM LINKS", len(transit_network.links)
         for link in transit_network.links:
