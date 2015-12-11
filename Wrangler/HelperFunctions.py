@@ -1,5 +1,5 @@
 # some generic helper functions for NetworkWrangler
-import copy
+import copy, xlrd
 
 def openFileOrString(f):
     # check if it's a filename or a file. Open it if it's a filename
@@ -55,3 +55,12 @@ def removeDuplicatesFromList(l):
         while this_list.count(x) > 1:
             this_list.remove(x)
     return this_list
+
+def getChampNodeNameDictFromFile(filename):
+    book = xlrd.open_workbook(filename)
+    sh = book.sheet_by_index(0)
+    nodeNames = {}
+    for rx in range(0,sh.nrows): # skip header
+        therow = sh.row(rx)
+        nodeNames[int(therow[0].value)] = therow[1].value
+    return nodeNames

@@ -4,6 +4,7 @@ from .NetworkException import NetworkException
 from .Node import Node
 from .Logger import WranglerLogger
 from .TransitLink import TransitLink
+from .Fare import Fare, ODFare, XFFare, FarelinksFare, FastTripsFare
 
 __all__ = ['TransitLine']
 
@@ -71,8 +72,9 @@ class TransitLine(object):
         self.n = []
         self.links = {} # Links were built for supplinks, xfers, but can be extended to all links.  Including here as a way to store stop-stop travel times by time-of-day
         self.comment = None
-        self.board_price = None
+        self.board_fare = None
         self.farelinks = []
+        self.node_to_zone = {}
         self.name = name
         if name and name.find('"')==0:
             self.name = name[1:-1]  # Strip leading/trailing dbl-quotes
@@ -177,33 +179,65 @@ class TransitLine(object):
         pass
 
     def addZones(self, node_to_zone):
-        for n in self.n:
-            if n in node_to_zone.keys():
-                self.node_to_zone[n] = node_to_zone[n]
-            else:
-                self.node_to_zone[n] = n
+        for n in node_to_zone.keys():
+            if not isinstance(n, int): raise NetworkException("NOT ALL NODES ARE INTEGERS")
+            if n <= 0: raise NetworkException("NOT ALL NODES ARE POSITIVE INTEGERS")
                 
-    def addFares(self, od_fares = None, xf_fares=None, farelinks_fares=None):
+        for n in self.n:
+            absn = abs(int(n.num))
+            if absn in node_to_zone.keys():
+                self.node_to_zone[absn] = node_to_zone[absn]
+            else:
+                self.node_to_zone[absn] = None
+                
+    def addFares(self, od_fares=None, xf_fares=None, farelinks_fares=None):
+        '''
+        This is a function added for fast-trips.
+        Adds od_fares, xf_fares, and farelinks_fares that apply to this line.
+        For xf_fares grabs the relevant boarding fare and saves it to self.board_fare.  There
+        will be multiple due to Cube fare xfer.fare structure, so this just keeps the first one.
+        Just takes the od_fares and farelinks_fares as they are.
+        '''
+        self.board_fare = None
+        self.farelinks_fares = []
+        ##nodeNames = getChampNodeNameDictFromFile(os.environ["CHAMP_node_names"])
         modenum = int(self.attr['MODE'])
-        if od_fares:
-            pass
+        nodes = self.getNodeSequenceAsInt()
+##        if od_fares:
+##            for od_fare in od_fares:
+##                if 
         
         if xf_fares:
             for fare in xf_fares:
                 if isinstance(fare,XFFare):
                     if fare.to_mode == modenum and fare.isBoardType():
-                        self.board_price    = fare.price
-                        self.board_fare_id  = fare.fare_id
-                        WranglerLogger.debug("ADDED FARE %s ($%2f) TO LINE %s" % (self.board_fare_id, float(self.board_price)/100, self.name))
+                        if not self.board_fare and fare.type == 'board':
+                            self.board_fare = copy.deepcopy(fare)
+                            self.board_fare.setOperatorAndLineFromChamp(self.name)
+                            WranglerLogger.debug("ADDED FARE %s ($%.2f) TO LINE %s for MODETYPE %s" % (self.board_fare.fare_id, float(self.board_fare.price)/100, self.name, self.getModeType()))
+                        elif (type(self.board_fare) == type(fare) and self.board_fare.price == fare.price and self.board_fare.fr_type == fare.fr_type and self.board_fare.to_type == fare.to_type):
+                            pass #WranglerLogger.debug("NOT ADDING IDENTICAL ACCESS LINK")
+                        elif fare.type == 'xfer':
+                            pass #WranglerLogger.debug("NOT ADDING XFER %s" % str(fare))
+                        elif fare.fr_type == None or fare.to_type == None:
+                            pass #WranglerLogger.debug("NOT ADDING FARE WITH UNUSED TYPE %s" % str(fare))
+                        elif fare.type == 'na':
+                            pass #WranglerLogger.debug("NOT ADDING FARE WITH UNUSED TYPE %s" % str(fare))
+                        else:
+                            WranglerLogger.debug("NOT ADDING FOR UNKNOWN REASON %s" % str(fare))
+
         if farelinks_fares:
             for fare in farelinks_fares:
                 if isinstance(fare,FarelinksFare):
                     if fare.isUnique():
                         if self.hasLink(fare.farelink.Anode, fare.farelink.Bnode):
                             self.farelinks.append(fare)
-                            WranglerLogger.debug("ADDED FARELINK %s ($%2f) TO LINE %s" % (fare.fare_id, float(self.board_price)/100, self.name))
+                            WranglerLogger.debug("ADDED FARELINK %s ($%.2f) TO LINE %s" % (fare.fare_id, float(fare.price)/100, self.name))
 
     def hasFarelinks(self):
+        '''
+        This is a function added for fast-trips
+        '''
         for fare in self.farelinks:
             if isinstance(fare, FarelinksFare): return True
         return False
@@ -221,45 +255,66 @@ class TransitLine(object):
                 else:
                     raise NetworkException("UNKNOWN DATA TYPE FOR NODE (%s): %s" % (type(n), str(n)))
 
-    def getNodeSequenceAsInt(self):
+    def getNodeSequenceAsInt(self, ignoreStops=True):
         nodes = []
         for n in self.n:
             if isinstance(n, int) or isinstance(n, str):
-                nodes.append(int(n))
+                if ignoreStops:
+                    nodes.append(abs(int(n)))
+                else:
+                    nodes.append(int(n))
             elif isinstance(n, Node):
-                nodes.append(int(n.num))
+                if ignoreStops:
+                    nodes.append(abs(int(n.num)))
+                else:
+                    nodes.append(int(n.num))
             else:
                 raise NetworkException("UNKNOWN DATA TYPE FOR NODE (%s): %s" % (type(n), str(n)))
-            
+        return nodes
+    
     def getFastTrips_FareRules_asList(self):
         # walk the nodes
         rules = []
-        rule = {'fare_id':None,'origin_id':None,'destination_id':None,'contains_id':None,
-                'fare_class':None,'start_time':None,'end_time':None,'price':None}
-
+        rule = None
+        origin_id, destination_id = None, None
+        price = self.board_fare.price
         nodes = self.getNodeSequenceAsInt()
+
+##        if self.hasFarelinks():
+##            WranglerLogger.debug("LINE %s HAS FARELINKS" % str(self.name))
+##            WranglerLogger.debug('node_to_zone: %s' % str(self.node_to_zone))
+##            WranglerLogger.debug('nodes:        %s' % str(nodes))
+
         idx = 0
-        while idx < len(nodes):
+        for idx in range(len(nodes)):
             start_node = nodes[idx]
-            origin_id = node_to_zone[start_node] if start_node in self.node_to_zone.keys() else start_node
+            origin_id = self.node_to_zone[start_node] if start_node in self.node_to_zone.keys() else start_node
 
             cost_increment = 0
             last_rule = None
-            for a, b in zip(nodes[idx:-1],nodes[idx+1]):
+            for a, b in zip(nodes[idx:-1],nodes[idx+1:]):
                 if self.hasFarelinks():
+                    origin_id       = self.node_to_zone[a] #if a in self.node_to_zone.keys() else None
+                    destination_id  = self.node_to_zone[b] #if b in self.node_to_zone.keys() else None
                     for fare in self.farelinks:
                         if isinstance(fare, FarelinksFare):
                             if (a,b) == (int(fare.farelink.Anode), int(fare.farelink.Bnode)):
                                 cost_increment += fare.price
-                                ##rule['fare_id'] = fare.fare_id
-                rule['origin_id']       = node_to_zone[a] if a in node_to_zone.keys() else None
-                rule['destination_id']  = node_to_zone[b] if b in node_to_zone.keys() else None
-                rule['price']           = self.board_price + cost_increment
-                rule['start_time']      = fare.start_time
-                if rule != last_rule:
-                    rules.append(rule)
+                                price = self.board_fare.price + cost_increment
+                                # WranglerLogger.debug("COST INCREMENT ON LINE %s to $%.2f between %s and %s" % (self.name, float(price)/100, str(origin_id), str(destination_id)))
+                else:
+                    # origin_id and destination_id only matter for lines that cross farelinks.
+                    origin_id       = None
+                    destination_id  = None
+                if price > 0: rule = FastTripsFare(champ_line_name = self.name,price=price,origin_id=origin_id,destination_id=destination_id)
+                if rule:
+                    if rule not in rules:
+                        rules.append(rule)
+                        #WranglerLogger.debug('%s' % str(rule))
 
                 last_rule = copy.deepcopy(rule)
+                
+        return rules
                 
     def setTravelTimes(self, highway_networks, extra_links=None):
         '''
@@ -317,7 +372,7 @@ class TransitLine(object):
                                     if distkey: dist = float(this_link[distkey])
                                     else: WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `DIST`" % (self.name, link_id, tp))
                                     if speedkey and distkey:
-                                        WranglerLogger.debug("LINE %s, LINK %s, TOD %s: CALCULATING TRAVEL TIME USING LINK'S DISTANCE AND SPEED" % (self.name, link_id, tp))
+                                        #WranglerLogger.debug("LINE %s, LINK %s, TOD %s: CALCULATING TRAVEL TIME USING LINK'S DISTANCE AND SPEED" % (self.name, link_id, tp))
                                         link['BUSTIME_%s' % tp] = (dist / 5280) / xyspeed
                                         found = True
                                     else:
@@ -326,7 +381,7 @@ class TransitLine(object):
                     # no off-street link (or it's missing TIME, or SPEED + DIST), then calculate the distance between points
                     if not found:
                         import math, geocoder
-                        WranglerLogger.debug("LINE %s, LINK %s, TOD %s: NO ON-STREET OR OFF-STREET LINK FOUND.  CALCULATING TRAVEL TIME MEASURED DISTANCE AND SPEED" % (self.name, link_id, tp))
+                        WranglerLogger.debug("LINE %s, LINK %s, TOD %s: NO ON-STREET OR OFF-STREET LINK FOUND.  CALCULATING TRAVEL TIME USING MEASURED DISTANCE AND SPEED" % (self.name, link_id, tp))
                         a_lon, a_lat = self.reproject_to_wgs84(a.x,a.y,EPSG='+init=EPSG:2227')
                         b_lon, b_lat = self.reproject_to_wgs84(b.x,b.y,EPSG='+init=EPSG:2227')
                         if not dist: dist = math.sqrt(math.pow((a.x-b.x),2)+math.pow((a.y-b.y),2))
