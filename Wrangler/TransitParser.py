@@ -687,7 +687,7 @@ class TransitParser(Parser):
                 cost = fare[1]
 
             if nodea and nodeb and cost:
-                currentFare = ODFare(from_station=nodea, to_station=nodeb, price=cost)
+                currentFare = ODFare(from_node=nodea, to_node=nodeb, price=cost)
                 ##print "Current Fare: ", str(currentFare)
                 nodea, nodeb, cost = None, None, None
 

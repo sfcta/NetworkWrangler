@@ -25,7 +25,7 @@ class Fare(object):
         self.operator           = operator
         self.line               = line
         self.champ_line_name    = champ_line_name
-        self.price              = int(price)    # passed by argument
+        self.price              = int(price) if price else 0   # passed by argument
         self.currency_type      = 'USD'         # default value
         self.payment_method     = 0             # 0 = on board, 1 = before boarding
         self.transfers          = transfers     # (0, 1, 2, empty).  Number of transfers permitted on this fare
@@ -37,10 +37,11 @@ class Fare(object):
         self.setFareClass()
 
     def setOperatorAndLineFromChamp(self, champ_line_name=None):
-        linename_dict = linename_pattern.match(name)
+        if not champ_line_name: champ_line_name = self.champ_line_name
+        linename_dict = linename_pattern.match(champ_line_name).groupdict()
         if not linename_dict: raise NetworkException("INVALID LINENAME %s" % str(name))
         self.operator   = WranglerLookups.OPERATOR_ID_TO_NAME[linename_dict['operator']]
-        self.line       = WranglerLookups.OPERATOR_ID_TO_NAME[linename_dict['name']]
+        self.line       = linename_dict['line']
             
     def setFareId(self, fare_id=None, style='fasttrips', suffix=None):
         if fare_id:
@@ -50,12 +51,11 @@ class Fare(object):
             operpart = self.operator
             linepart = self.line
         elif self.champ_line_name:
-            linename_dict = linename_pattern.match(self.champ_line_name)
-            if not linename_dict: raise NetworkException("INVALID LINENAME %s" % str(self.champ_line_name))
-            operpart = WranglerLookups.OPERATOR_ID_TO_NAME[linename_dict['operator']]
-            linepart = WranglerLookups.OPERATOR_ID_TO_NAME[linename_dict['name']]
+            self.setOperatorAndLineFromChamp(self.champ_line_name)
+            operpart = self.operator
+            linepart = self.line
         else:
-            self.fare_id = 'generic'
+            self.fare_id = 'basic'
             return self.fare_id
         
         self.fare_id    = '%s_%s' % (operpart, linepart)
@@ -108,7 +108,8 @@ class Fare(object):
     # Dictionary methods
     def __getitem__(self,key): return self.attr[key.upper()]
     def __setitem__(self,key,value): self.attr[key.upper()]=value
-    def __cmp__(self,other): return cmp(self.fare_id,other)
+    def __cmp__(self,other):
+        return cmp(self.__dict__,other.__dict__)
 
     # String representation: for outputting to line-file
     def __repr__(self):
@@ -116,22 +117,35 @@ class Fare(object):
         return s
 
     def __str__(self):
-        s = '%s, $%2f %s' % (self.fare_id if self.fare_id else "unnamed fare", float(price)/100, self.currency_type)
+        s = '%s, $%.2f %s' % (self.fare_id if self.fare_id else "unnamed fare", float(price)/100, self.currency_type)
         return s
 
 class ODFare(Fare):
-    def __init__(self, fare_id=None, from_station=None, to_station=None, price=None, tod=None, \
+    def __init__(self, fare_id=None, from_node=None, to_node=None, price=None, tod=None, \
                  start_time=None, end_time=None, template=None, station_lookup=None):
         Fare.__init__(self, fare_id=fare_id, price=price, tod=tod, start_time=start_time, end_time=end_time)
-        self.fr     = from_station
-        self.to     = to_station
-        self.setFareId()
+        self.fr_node = abs(int(from_node))
+        self.to_node = abs(int(to_node))
+        self.fr_name = None
+        self.to_name = None
         
+        if station_lookup: addStationNames(station_lookup)
+        self.setFareId()
+
+    def addStationNames(self, station_lookup):
+        self.fr_name = station_lookup[self.fr_node] if self.fr_node in station_lookup.keys() else str(self.fr_node)
+        self.to_name = station_lookup[self.to_node] if self.to_node in station_lookup.keys() else str(self.to_node)
+
+    def hasStationNames(self):
+        if self.fr_name and self.to_name: return True
+        return False
+    
     def __repr__(self):
-        pass
+        s = str(self)
+        return s
 
     def __str__(self):
-        pass #s = '' % (
+        return '%s $%.2f from:%s to:%s' % (self.fare_id, float(self.price)/100, self.fr, self.to)
 
 class XFFare(Fare):
     def __init__(self, fare_id=None, from_mode=None, to_mode=None, price=None, tod=None, transfers=None, \
@@ -143,19 +157,23 @@ class XFFare(Fare):
         self.to_desc = WranglerLookups.MODE_TO_MODETYPE[self.to_mode]['desc']
         self.fr_type = WranglerLookups.MODE_TO_MODETYPE[self.fr_mode]['type']
         self.to_type = WranglerLookups.MODE_TO_MODETYPE[self.to_mode]['type']
-        
-        if self.fr_type in WranglerLookups.NONTRANSIT_TYPES and self.to_type in WranglerLookups.TRANSIT_TYPES:
+
+        if self.fr_mode in WranglerLookups.UNUSED_MODES or self.to_mode in WranglerLookups.UNUSED_MODES:
+            self.type = 'na'
+        elif self.fr_mode in WranglerLookups.EGRESS_MODES or self.to_mode in WranglerLookups.EGRESS_MODES:
+            self.type = 'na'
+        elif self.fr_mode in WranglerLookups.ACCESS_MODES and self.to_mode in WranglerLookups.TRANSIT_MODES:
             self.type = 'board'
-        elif self.fr_type in WranglerLookups.NONTRANSIT_TYPES and self.to_type in WranglerLookups.NONTRANSIT_TYPES:
-            WrangerLogger.warn('INVALID XFARE TYPE FROM mode %s (%d) to mode %s (%d)' % (self.fr_type, self.fr, self.to_type, self.to))
-        elif self.fr_type in WranglerLookups.TRANSIT_TYPES and self.to_type in WranglerLookups.TRANSIT_TYPES:
+        elif self.fr_mode in WranglerLookups.TRANSIT_MODES and self.to_mode in WranglerLookups.TRANSIT_MODES:
+            self.type = 'xfer'
+        elif self.fr_mode in WranglerLookups.TRANSFER_MODES:
             self.type = 'xfer'
         else:
-            WranglerLogger.warn('UNKNOWN TRANSIT MODE TYPE (%d, %d)' % (self.fr, self.to))
-
+            WranglerLogger.warn('UNKNOWN TRANSIT MODE TYPE (%d, %d)' % (self.fr_mode, self.to_mode))
+            
         Fare.__init__(self, fare_id=fare_id, price=price, tod=tod, transfers=transfers, \
                               transfer_duration=transfer_duration, start_time=start_time, end_time=end_time)
-        
+
     def setFareId(self, fare_id=None, style='fasttrips', suffix=None):
         if not suffix: suffix = ''
         if self.type == 'xfer':
@@ -180,17 +198,15 @@ class XFFare(Fare):
         return False
     
     def __repr__(self):
-        #s = '%s, %s (%d), %s (%d), %d' % (self.fare_id, self.fr_desc, self.fr, self.to_desc, self.to, self.cost)
-        s = '%s, %s, %s, %d' % (self.fare_id, self.fr_desc, self.to_desc, self.price)
+        s = '%s ($%.2f) %s(%d) %s(%d)' % (self.fare_id, float(self.price)/100, self.fr_desc, self.fr_mode, self.to_desc, self.to_mode)
         return s
 
     def __str__(self):
-        #s = '%s, %s (%d), %s (%d), %d' % (self.fare_id, self.fr_desc, self.fr, self.to_desc, self.to, self.cost)
-        s = '%s, %s, %s, %d' % (self.fare_id, self.fr_desc, self.to_desc, self.price)
+        s = '%s $%.2f %s(%d) %s(%d)' % (self.fare_id, float(self.price)/100, self.fr_desc, self.fr_mode, self.to_desc, self.to_mode)
         return s
 
 class FarelinksFare(Fare):
-    def __init__(self, fare_id=None, links=None, modes=None, price=None, tod=None, start_time=None, end_time=None):
+    def __init__(self, fare_id=None, links=None, modes=None, price=None, tod=None, start_time=None, end_time=None, oneway=True):
         if not modes:
             self.modes = [mode] if mode else []
         elif isinstance(modes, list):
@@ -201,6 +217,7 @@ class FarelinksFare(Fare):
         self.farelink = None
         self.mode = None
         self.farelinks = []
+        self.oneway = oneway
         
         Fare.__init__(self, fare_id=fare_id, price=price, tod=tod, start_time=start_time, end_time=end_time)
         
@@ -229,7 +246,7 @@ class FarelinksFare(Fare):
             return True
         else:
             return False
-                    
+
     def setFareId(self, fare_id=None, style='fasttrips', suffix=None):
         if fare_id:
             self.fare_id = fare_id
@@ -241,7 +258,7 @@ class FarelinksFare(Fare):
                     if not WranglerLookups.MODE_TO_MODETYPE[int(m)] in WranglerLookups.NONTRANSIT_TYPES:
                         i+=1
                         # if it's a transit mode, grab it in case it's the only one
-                        modepart = WranglerLookups.MODE_TO_MODETYPE[int(m)]
+                        modepart = WranglerLookups.MODE_TO_MODETYPE[int(m)]['desc']
             if i == 1:
                 pass
             elif i > 1:
@@ -269,8 +286,6 @@ class FarelinksFare(Fare):
                 
             return self.fare_id
         
-   
-                    
     def uniqueFarelinksToList(self):
         '''
         Create a unique FarelinksFare for each combination of links and modes
@@ -285,33 +300,28 @@ class FarelinksFare(Fare):
         return farelist
 
     def __repr__(self):
-        s = '%s, $%.2f, links:' % (self.fare_id, self.price/100)
-        for link in self.farelinks:
-            s += ',%s-%s' % (str(link.nodeA), str(link.nodeB))
-
-        s += ', modes:'
-        for mode in self.modes:
-            s += ',%s' % str(mode)
-            
+        s = str(self)
         return s
 
     def __str__(self):
-        s = '%s, $%.2f, links:' % (self.fare_id, self.price/100)
-        for link in self.farelinks:
-            s += ',%s-%s' % (str(link.Anode), str(link.Bnode))
-
-        s += ', modes:'
-        for mode in self.modes:
-            s += ',%s' % str(mode)
-            
+        s = '%s $%.2f links(%d):' % (self.fare_id, float(self.price)/100,len(self.farelinks))
+        for link, i in zip(self.farelinks,range(len(self.farelinks))):
+            s += '%s-%s' % (str(link.Anode), str(link.Bnode))
+            if i < len(self.farelinks) - 1: s += ',' 
+        s += ' modes:'
+        for mode, i in zip(self.modes, range(len(self.modes))):
+            s += '%s' % str(mode)
+            if i < len(self.modes) - 1: s += ','
         return s        
 
 class FastTripsFare(Fare):
-    def __init__(self,fare_id=None,operator=None,line=None,origin_id=None,destination_id=None,\
-                 contains_id=None,fare_class=None,start_time=None,end_time=None,champ_line_name=None):
+    def __init__(self,fare_id=None,operator=None,line=None,origin_id=None,destination_id=None,
+                 contains_id=None,price=None,fare_class=None,start_time=None,end_time=None,
+                 transfers=None,transfer_duration=None,
+                 champ_line_name=None):
         
-        Fare.__init__(self, fare_id=fare_id, operator=operator, line=line, price=price, tod=tod, transfers=transfers, \
-                      transfer_duration=transfer_duration, start_time=start_time, end_time=end_time, \
+        Fare.__init__(self, fare_id=fare_id, operator=operator, line=line, price=price, transfers=transfers,
+                      transfer_duration=transfer_duration, start_time=start_time, end_time=end_time,
                       champ_line_name=champ_line_name)
         self.origin_id      = origin_id
         self.destination_id = destination_id
@@ -319,5 +329,10 @@ class FastTripsFare(Fare):
 
     def __getitem__(self,key): return self[key]
     def __setitem__(self,key,value): self[key]=value
-    def __cmp__(self,other): return cmp(self.__dict__,other.__dict__)
-    
+    def __cmp__(self,other):
+        if not isinstance(other, FastTripsFare): return -1
+        return cmp(self.__dict__,other.__dict__)
+
+    def __str__(self):
+        s = 'fare_id: %s, orig_id: %s, dest_id: %s, cont_id: %s, fare_class: %s, price: $%.2f' % (self.fare_id,self.origin_id,self.destination_id,self.contains_id,self.fare_class, float(self.price)/100)
+        return s
