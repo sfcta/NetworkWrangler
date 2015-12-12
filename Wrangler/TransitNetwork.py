@@ -860,7 +860,7 @@ class TransitNetwork(Network):
                 line.writeFastTrips_Trips(f_trips, f_stoptimes, id_generator, writeHeaders)
                 writeHeaders = False # only write them the with the first line.
                 
-    def getLeftAndRightTransitNodeNums(self,link,stops_only=True):
+    def getLeftAndRightTransitNodeNums(self,farelink,stops_only=True):
         '''
         This is a function added for fast-trips.
         Takes a TransitLink, and iterates over each line returning a list of all nodes on either
@@ -873,8 +873,9 @@ class TransitNetwork(Network):
         for line in self.lines:
             if isinstance(line,str):
                 continue
-            if line.hasLink(link.Anode,link.Bnode):
-                for n in line.n[:line.getNodeIdx(link.Bnode)]:
+            modenum = int(line.attr['MODE'])
+            if line.hasLink(farelink.farelink.Anode,farelink.farelink.Bnode) and modenum == int(farelink.mode):
+                for n in line.n[:line.getNodeIdx(farelink.farelink.Bnode)]:
                     if isinstance(n, int):
                         node_num = n
                         if node_num < 0 and stops_only: continue
@@ -886,7 +887,7 @@ class TransitNetwork(Network):
                     if node_num not in left_nodes:
                         left_nodes.append(node_num)
                         
-                for n in line.n[line.getNodeIdx(link.Bnode):]:
+                for n in line.n[line.getNodeIdx(farelink.farelink.Bnode):]:
                     if isinstance(n, int):
                         node_num = n
                         if node_num < 0 and stops_only: continue
@@ -962,7 +963,7 @@ class TransitNetwork(Network):
                 link_counter += 1
                 if link_counter % 10 == 0: print "checked %d links" % link_counter
                 if fare.isUnique():
-                    (left_nodes, right_nodes) = self.getLeftAndRightTransitNodeNums(fare.farelink)
+                    (left_nodes, right_nodes) = self.getLeftAndRightTransitNodeNums(fare)
                     if len(left_nodes) == 0 and len(right_nodes) == 0: continue
                     left_nodes.sort()
                     right_nodes.sort()

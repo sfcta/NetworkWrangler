@@ -230,7 +230,7 @@ class TransitLine(object):
             for fare in farelinks_fares:
                 if isinstance(fare,FarelinksFare):
                     if fare.isUnique():
-                        if self.hasLink(fare.farelink.Anode, fare.farelink.Bnode):
+                        if self.hasLink(fare.farelink.Anode, fare.farelink.Bnode) and modenum == int(fare.mode):
                             self.farelinks.append(fare)
                             WranglerLogger.debug("ADDED FARELINK %s ($%.2f) TO LINE %s" % (fare.fare_id, float(fare.price)/100, self.name))
 
@@ -293,6 +293,7 @@ class TransitLine(object):
                     # if it's a stop, get the zone and reset the stop increment.
                     stop_a          = a
                     origin_id       = self.node_to_zone[stop_a]
+                    price           = self.board_fare.price
                     cost_increment  = 0
                     stop_b          = None
                 else:
