@@ -145,7 +145,7 @@ class ODFare(Fare):
         return s
 
     def __str__(self):
-        return '%s $%.2f from:%s to:%s' % (self.fare_id, float(self.price)/100, self.fr, self.to)
+        return '%s $%.2f from:%s to:%s' % (self.fare_id, float(self.price)/100, self.fr_name, self.to_name)
 
 class XFFare(Fare):
     def __init__(self, fare_id=None, from_mode=None, to_mode=None, price=None, tod=None, transfers=None, \
@@ -238,7 +238,7 @@ class FarelinksFare(Fare):
 
         if len(self.farelinks)==1:
             self.farelink = self.farelinks[0]
-        if len(self.modes)==0:
+        if len(self.modes)==1:
             self.mode = self.modes[0]
 
     def isUnique(self):
