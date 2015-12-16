@@ -16,6 +16,24 @@ def generate_unique_id(seq):
     for x in seq:
         yield x
 
+def reproject_to_wgs84(longitude, latitude, EPSG = "+init=EPSG:2926", conversion = 0.3048006096012192):
+    '''
+    Converts the passed in coordinates from their native projection (default is state plane WA North-EPSG:2926)
+    to wgs84. Returns a two item tuple containing the longitude (x) and latitude (y) in wgs84. Coordinates
+    must be in meters hence the default conversion factor- PSRC's are in state plane feet.  
+    '''
+    import pyproj
+    # Remember long is x and lat is y!
+    prj_wgs = pyproj.Proj(init='epsg:4326')
+    prj_sp = pyproj.Proj(EPSG)
+    
+    # Need to convert feet to meters:
+    longitude = longitude * conversion
+    latitude = latitude * conversion
+    x, y = pyproj.transform(prj_sp, prj_wgs, longitude, latitude)
+    
+    return x, y
+
 def getListOverlap(list1, list2):
     '''
     Assumes list1 and list2 are lists of integers where elements are unique within
