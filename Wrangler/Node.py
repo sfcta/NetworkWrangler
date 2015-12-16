@@ -1,4 +1,5 @@
 import os,sys
+from .HelperFunctions import *
 
 __all__ = ['Node']
 
@@ -17,6 +18,9 @@ class Node(object):
     
     # static variables for nodes.xls
     descriptions        = {}
+    node_to_zone        = {}
+    onstreet_nodes      = []
+    offstreet_nodes     = []
     descriptions_read   = False
 
     def __init__(self, n, coord_dict=None):
@@ -26,12 +30,14 @@ class Node(object):
         else:
             self.num = n            
         self.stop=(self.num.find('-')<0 and True or False)
-        self.comment = None
+
+        Node.getDescriptions()
+        self.comment = None     
 
         if isinstance(coord_dict, dict):
-            (self.x,self.y) = coord_dict[n]
+            (self.x,self.y) = coord_dict[abs(int(n))]
         else:
-            (self.x,self.y) = (-1,-1)                
+            (self.x,self.y) = (-1,-1)
 
     def addXY(self, coords):
         """
@@ -100,7 +106,7 @@ class Node(object):
     # Dictionary methods
     def __getitem__(self,key): return self.attr[key]
     def __setitem__(self,key,value): self.attr[key]=value
-    def __cmp__(self,other): return cmp(int(self.num),other)
+    def __cmp__(self,other): return cmp(self.__dict__,other.__dict__)
 
     def description(self):
         """
@@ -137,4 +143,73 @@ class Node(object):
             print sys.exc_info()
             
         Node.descriptions_read = True
-                
+
+    @staticmethod
+    def setNodeToZone(node_to_zone):
+        if not isinstance(node_to_zone, dict): raise NetworkException("INVALID NODE_TO_ZONE DICTIONARY")
+        Node.node_to_zone = node_to_zone
+
+    @staticmethod
+    def setOnStreetNodes(onstreet_nodes):
+        if not isinstance(onstreet_nodes, list): raise NetworkException("INVALID ONSTREET_NODES LIST")
+        Node.onstreet_nodes = onstreet_nodes
+        
+    @staticmethod
+    def setOffStreetNodes(offstreet_nodes):
+        if not isinstance(offstreet_nodes, list): raise NetworkException("INVALID OFFSTREET_NODES LIST")
+        Node.offstreet_nodes = offstreet_nodes
+        
+class FastTripsNode(Node):
+    '''
+    FastTrips Node Class.
+    '''
+    def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None):
+        Fare.__init__(n,champ_coord_dict)
+
+        # stops.txt req'd
+        self.stop_id        = abs(int(n))
+        self.stop_name      = Node.descriptions(self.stop_id) if self.stop_id in Node.descriptions.keys() else str(self.stop_id)
+        if stop_lat and stop_lon:
+            self.stop_lat = stop_lat
+            self.stop_lon = stop_lon
+        else:
+            self.stop_lon, self.stop_lat = reproject_to_wgs84(self.x,self.y,EPSG='+init=EPSG:2227')
+
+        # stops optional
+        self.stop_code              = None
+        self.stop_desc              = None
+        if Node.node_to_zone and self.stop_id in Node.node_to_zone.keys():
+            self.zone_id            = Node.node_to_zone[self.stop_id]
+        else:
+            WranglerLogger.warn("Trying to construct a FastTripsNode without ZONE_ID")
+        self.location_type          = None
+        self.parent_station         = None
+        self.stop_timezone          = None
+        self.wheelchair_boarding    = None
+
+        # stops_ft req'd
+        ## -- none --
+        
+        # stops_ft optional
+        self.shelter                = None
+        self.lighting               = None
+        self.bike_parking           = None
+        self.bike_share_station     = None
+        self.seating                = None
+        self.platform_height        = None
+        self.level                  = None
+        self.off_board_payment      = None
+
+    def asDataFrame(self, *args):
+        import pandas as pd
+        if args is None:
+            args = ['stop_id','stop_name','stop_lat','stop_lon','zone_id']
+        data = []        
+        for arg in args:
+            data.append(getattr(self,arg))
+
+        df = pd.DataFrame(columns=args,data=[data])
+        return df
+        
+            ##if arg not in self.keys()self[arg]
+        
