@@ -4,7 +4,7 @@ from .Linki import Linki
 from .Logger import WranglerLogger
 from .Network import Network
 from .NetworkException import NetworkException
-from .Node import Node
+from .Node import Node, FastTripsNode
 from .PNRLink import PNRLink
 from .Regexes import nodepair_pattern
 from .TransitAssignmentData import TransitAssignmentData, TransitAssignmentDataException
@@ -15,6 +15,7 @@ from .TransitParser import TransitParser, transit_file_def
 from .Fare import ODFare, XFFare, FarelinksFare
 from .ZACLink import ZACLink
 from .HelperFunctions import *
+import pandas as pd
 
 __all__ = ['TransitNetwork']
 
@@ -54,8 +55,8 @@ class TransitNetwork(Network):
         self.od_fares           = []    # added for fast-trips
         self.xf_fares           = []    # added for fast-trips
         self.farelinks_fares    = []    # added for fast-trips
-        self.zone_to_nodes      = {}    # added for fast-trips
-        self.node_to_zone       = {}    # added for fast-trips
+        self.fasttrips_fares    = []    # added for fast-trips
+        self.fasttrips_nodes    = {}    # added for fast-trips dict of int nodenum -> FastTripsNode
 
         for farefile in TransitNetwork.FARE_FILES:
             self.farefiles[farefile] = []
@@ -409,7 +410,14 @@ class TransitNetwork(Network):
         if (eaLong-eaComb)>0: eaShort=eaComb*eaLong/(eaLong-eaComb)
         shortLineInst.setFreqs([amShort,mdShort,pmShort,evShort,eaShort])
     
-    
+    def setFastTripsNodes(self):
+        for line in self.lines:
+            if not isinstance(line, TransitLine):
+                continue
+            for n in line.n:
+                if not isinstance(n, Node):
+                    continue
+                
     def getCombinedFreq(self, names, coverage_set=False):
         """
         Pass a regex pattern, we'll show the combined frequency.  This
@@ -822,12 +830,12 @@ class TransitNetwork(Network):
 ##    def writeFastTrips_Network(self, dir, shapes=shapes.txt, stop_times, ):
 ##        pass
     
-    def writeFastTrips_Shapes(self, f, writeHeaders=True):
+    def writeFastTrips_Shapes(self, f='shapes.txt', path='.', writeHeaders=True):
         '''
         this is a funtion added for fast-trips.
         Iterate each line in this TransitNetwork and write fast-trips style shapes.txt to f
         '''
-        f = openFileOrString(f)
+        f = openFileOrString(os.path.join(path,f))
         count = 0
         # go through lines and write them to f.
         for line in self.lines:
@@ -841,15 +849,15 @@ class TransitNetwork(Network):
                 WranglerLogger.debug("skipping line because unknown type")
         print "wrote %d lines" % count
 
-    def writeFastTrips_Trips(self, f_trips, f_stoptimes, writeHeaders=True):
+    def writeFastTrips_Trips(self, f_trips='trips.txt', f_stoptimes='stop_times.txt', path='.', writeHeaders=True):
         '''
         This is a function added for fast-trips.
         Iterate each line in this TransitNetwork and write fast-trips style stop_times.txt fo f
         This requires that each line has a complete set of links with ``BUSTIME_<TOD>`` for each
         <TOD> in ``AM``, ``MD``, ``PM``, ``EV``, ``EA``.
         '''
-        f_trips     = openFileOrString(f_trips)
-        f_stoptimes = openFileOrString(f_stoptimes)
+        f_trips     = openFileOrString(os.path.join(path,f_trips))
+        f_stoptimes = openFileOrString(os.path.join(path,f_stoptimes))
         id_generator = generate_unique_id(range(1,999999))
         
         # go through lines and write them to f.
@@ -992,11 +1000,12 @@ class TransitNetwork(Network):
                     WranglerLogger.warn("DUPLICATE ZONE-NODE PAIR for NODE %d" % n)
                 node_to_zone[n] = zone
 
-        self.zone_to_nodes = zone_to_nodes
-        self.node_to_zone = node_to_zone
-
-        for line in self.lines:
-            if isinstance(line, TransitLine): line.addZones(node_to_zone)
+        #self.zone_to_nodes = zone_to_nodes
+        #self.node_to_zone = node_to_zone
+        Node.setNodeToZone(node_to_zone)
+        
+##        for line in self.lines:
+##            if isinstance(line, TransitLine): line.addZones(node_to_zone)
         return zone_to_nodes
     
     def addFaresToLines(self):
@@ -1007,36 +1016,99 @@ class TransitNetwork(Network):
             if isinstance(line, TransitLine):
                 line.addFares(od_fares=self.od_fares, xf_fares=self.xf_fares, farelinks_fares=self.farelinks_fares)
                 
-    def createLineLevelFares(self):
+    def createFastTripsFares(self):
         '''
         This is a function added for fast-trips.
         '''
-        masterlist = []
+        fasttrips_fares = []
         for line in self.lines:
             if isinstance(line,TransitLine):
-                farerules = line.getFastTrips_FareRules_asList()
-                WranglerLogger.debug("GOT %d FAST-TRIPS FARE RULES FOR LINE %s" % (len(farerules),line.name))
-                for rule in farerules:
-                    if rule not in masterlist: masterlist.append(rule)
-        self.fasttrips_fares = masterlist
-        return masterlist
+                fares = line.getFastTripsFares_asList()
+                WranglerLogger.debug("GOT %d FAST-TRIPS FARE RULES FOR LINE %s" % (len(fares),line.name))
+                for fare in fares:
+                    if fare not in fasttrips_fares: fasttrips_fares.append(fare)
+        self.fasttrips_fares = fasttrips_fares
+        return fasttrips_fares
 
-    def writeFastTripsFares_dumb(self,f='dumbstops.txt'):
-        f = openFileOrString(f)
+    def writeFastTripsFares_dumb(self,f='dumbstops.txt',path='.'):
+        f = openFileOrString(os.path.join(path,f))
         for rule in self.fasttrips_fares:
             f.write('%s\n' % str(rule))
+
+    def createFastTripsNodes(self):
+        '''
+        This is a function added for fast-trips.txt
+
+        All stops and stops_ft variables:
+        'stop_id','stop_code','stop_name','stop_desc','stop_lat','stop_lon','zone_id','location_type',
+        'parent_station','stop_timezone','wheelchair_boarding','shelter','lighting','bike_parking',
+        'bike_share_station','seating','platform_height','level','off_board_payment'
+        '''
+        
+        nodes = {} # nodenum (int): Node
+        # add all nodes that occur in any line, regardless of whether they are stops. Any nodes
+        # that are a stop in one line, and not a stop in another will be duplicated.
+        for line in self.lines:
+            for n in line.n:
+                if not isinstance(n,Node):
+                    if isinstance(n,int): raise NetworkExcetption('LINE %s HAS INTEGER NODE.  ALL NODES SHOULD BE OF TYPE NODE.' % line.name)
+                    continue
+                if int(n.num) not in nodes.keys():
+                    ft_node = FastTripsNode(int(n.num), {abs(int(n.num)):(n.x,n.y)})
+                    nodes[int(n.num)] = ft_node
+        self.fasttrips_nodes = nodes
             
-    def writeFastTrips_Stops(self,f_stops='stops.txt',f_stops_ft='stops_ft.txt'):
+    def writeFastTrips_Fares(self,f_farerules='fare_rules.txt',f_farerules_ft='fare_rules_ft.txt',
+                             f_fareattr='fare_attributes_ft.txt',fare_attr_ft='fare_attributes_ft.txt',
+                             path='.', writeHeaders=True):
+        ##f_farerules     = openFileOrString(f_farerules)
+        f_farerules_ft  = openFileOrString(os.path.join(path,f_farerules_ft))
+        farerules_df = pd.DataFrame(columns=['fare_id','route_id','origin_id','destination_id','contains_id'])
+        
+        if writeHeaders:
+            #f_farerules.write('fare_id,route_id,origin_id,destination_id,contains_id\n')
+            f_farerules_ft.write('fare_id,fare_class,start_time,end_time\n')
+        for fare in self.fasttrips_fares:
+            farerules_row = pd.DataFrame(columns=['fare_id','route_id','origin_id','destination_id','contains_id'],
+                                         data=[[fare.fare_id,fare.line,fare.origin_id,fare.destination_id,fare.contains_id]])
+            farerules_df = farerules_df.append(farerules_row)
+            #f_farerules.write('%s,%s,%s,%s,%s\n' % (fare.fare_id,fare.linename,fare.origin_id,fare.destination_id,fare.contains_id))
+            f_farerules_ft.write('%s,%s,%s,%s\n' % (fare.fare_id,fare.fare_class,fare.start_time,fare.end_time))
+        farerules_df = farerules_df.drop_duplicates()
+        farerules_df.to_csv(os.path.join(path,f_farerules),index=False)
+        
+    def writeFastTrips_Transfers(self):
+        pass
+    
+    def writeFastTrips_Stops(self,f_stops='stops.txt',f_stops_ft='stops_ft.txt',path='.', writeHeaders=True):
         # UNFINISHED
         # MAY NEED TO KNOW ZONES, WHICH WILL COME FROM ODFARES
         '''
         stops:      stop_id, stop_code*, stop_name, stop_desc*, stop_lat, stop_lon, zone_id*, location_type*,
-                    parent_station*,stop_timezone*,stop_timezone*, wheelchair_boarding*
+                    parent_station*,stop_timezone*,wheelchair_boarding*
         stops_ft:   stop_id, shelter*, lighting*, bike_parking*, bike_share_station*, seating*, platform_hight*,
                     level*, off_board_payment*
         '''
-        f_stops     = openFileOrString(f_stops)
-        f_stops_ft  = openFileOrString(f_stops_ft) 
+        #f_stops     = openFileOrString(os.path.join(path,f_stops))
+        #f_stops_ft  = openFileOrString(os.path.join(path,f_stops_ft))
+        df_stops = None
+        df_stops_ft = None
+
+        for node in self.fasttrips_nodes:
+            if node.isStop():
+                df_row = node.asDataFrame('stop_id','stop_name','stop_lat','stop_lon','zone_id')
+                print df_row
+                if not df_stops:
+                    df_stops = df_row
+                else:
+                    df_stops = df.append(df_row)
+                df_row = node.asDataFrame('stop_id')
+                if not df_stops_ft:
+                    df_stops_ft = df_row
+                else:
+                    df_stops_ft = df_stops_ft.append(df_row)
+        df_stops.to_csv(f_stops,index=False,header=writeHeaders)
+        df_stops_ft.to_csv(f_stops_ft,index=False,header=writeHeaders)
 
     def writeFastTrips_RoutesStopsFares(f_stops='stops.txt',f_stops_ft='stops_ft.txt',f_routes='routes.txt',f_routes_ft='routes_ft.txt',f_farerules='fare_rules.txt',
                                         f_farerules_ft='fare_rules_ft.txt',f_fareattr='fare_attributes.txt',f_fareattr_ft='fare_attributes_ft.txt',
