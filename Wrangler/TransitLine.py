@@ -5,6 +5,7 @@ from .Node import Node
 from .Logger import WranglerLogger
 from .TransitLink import TransitLink
 from .Fare import Fare, ODFare, XFFare, FarelinksFare, FastTripsFare
+from .HelperFunctions import *
 
 __all__ = ['TransitLine']
 
@@ -74,7 +75,8 @@ class TransitLine(object):
         self.comment = None
         self.board_fare = None
         self.farelinks = []
-        self.node_to_zone = {}
+        self.od_fares = []
+        ##self.node_to_zone = {}
         self.name = name
         if name and name.find('"')==0:
             self.name = name[1:-1]  # Strip leading/trailing dbl-quotes
@@ -178,17 +180,19 @@ class TransitLine(object):
     def setDistances(self, highway_networks, extra_links=None):
         pass
 
-    def addZones(self, node_to_zone):
-        for n in node_to_zone.keys():
-            if not isinstance(n, int): raise NetworkException("NOT ALL NODES ARE INTEGERS")
-            if n <= 0: raise NetworkException("NOT ALL NODES ARE POSITIVE INTEGERS")
-                
-        for n in self.n:
-            absn = abs(int(n.num))
-            if absn in node_to_zone.keys():
-                self.node_to_zone[absn] = node_to_zone[absn]
-            else:
-                self.node_to_zone[absn] = None
+##    def addZones(self, node_to_zone):
+##        for n in node_to_zone.keys():
+##            if not isinstance(n, int): raise NetworkException("NOT ALL NODES ARE INTEGERS")
+##            if n <= 0: raise NetworkException("NOT ALL NODES ARE POSITIVE INTEGERS")
+##                
+##        for n in self.n:
+##            absn = abs(int(n.num))
+##            if absn in node_to_zone.keys():
+##                self.node_to_zone[absn] = node_to_zone[absn]
+##                n.zone = node_to_zone[absn]
+##            else:
+##                self.node_to_zone[absn] = None
+##                n.zone = None
                 
     def addFares(self, od_fares=None, xf_fares=None, farelinks_fares=None):
         '''
@@ -200,13 +204,16 @@ class TransitLine(object):
         '''
         self.board_fare = None
         self.farelinks_fares = []
-        ##nodeNames = getChampNodeNameDictFromFile(os.environ["CHAMP_node_names"])
+        #nodeNames = getChampNodeNameDictFromFile(os.environ["CHAMP_node_names"])
         modenum = int(self.attr['MODE'])
         nodes = self.getNodeSequenceAsInt()
-##        if od_fares:
-##            for od_fare in od_fares:
-##                if 
-        
+
+        if od_fares:
+            for fare in od_fares:
+                if isinstance(fare,ODFare):
+                    if fare.fr_node in nodes and fare.to_node in nodes:
+                        self.od_fares.append(fare)
+                        WranglerLogger.debug("ADDED OD FARE %s TO LINE %s" % (fare,self.name))
         if xf_fares:
             for fare in xf_fares:
                 if isinstance(fare,XFFare):
@@ -236,10 +243,18 @@ class TransitLine(object):
 
     def hasFarelinks(self):
         '''
-        This is a function added for fast-trips
+        This is a function added for fast-trips.
         '''
         for fare in self.farelinks:
             if isinstance(fare, FarelinksFare): return True
+        return False
+
+    def hasODFares(self):
+        '''
+        This is a function added for fast-trips.
+        '''
+        for fare in self.od_fares:
+            if isinstance(fare, ODFare): return True
         return False
 
     def getStopList(self, style='int'):
@@ -256,6 +271,9 @@ class TransitLine(object):
                     raise NetworkException("UNKNOWN DATA TYPE FOR NODE (%s): %s" % (type(n), str(n)))
 
     def getNodeSequenceAsInt(self, ignoreStops=True):
+        '''
+        This is a function added for fast-trips.
+        '''
         nodes = []
         for n in self.n:
             if isinstance(n, int) or isinstance(n, str):
@@ -271,8 +289,24 @@ class TransitLine(object):
             else:
                 raise NetworkException("UNKNOWN DATA TYPE FOR NODE (%s): %s" % (type(n), str(n)))
         return nodes
+
+    def getODFaresDict(self,od_fares=None):
+        '''
+        This is a function added for fast-trips.
+        '''
+        if not od_fares: od_fares = self.od_fares
+        od_fare_dict = {}
+        for fare in od_fares:
+            if isinstance(fare,ODFare):
+                a=fare.fr_node
+                b=fare.to_node
+                od_fare_dict[(a,b)] = fare
+        return od_fare_dict
     
-    def getFastTrips_FareRules_asList(self):
+    def getFastTripsFares_asList(self):
+        '''
+        This is a function added for fast-trips.
+        '''
         # walk the nodes
         rules = []
         rule = None
@@ -281,8 +315,18 @@ class TransitLine(object):
         nodes = self.getNodeSequenceAsInt(ignoreStops=False)
 
         idx = 0
-        if self.hasFarelinks():
-            
+        if self.hasODFares() and self.hasFarelinks():
+            WranglerLogger.warn("LINE %s HAS BOTH OD FARES AND FARELINKS FARES." % self.name)
+        
+        if self.hasODFares():
+            for fare in self.od_fares:
+                if isinstance(fare, ODFare):
+                    rule = FastTripsFare(champ_line_name=self.name,price=self.board_fare.price + fare.price,origin_id=fare.fr_name,destination_id=fare.to_name)
+                    WranglerLogger.debug('%s' % str(rule))
+                    if rule not in rules:
+                        rules.append(rule)
+                    
+        elif self.hasFarelinks():
             last_rule = None
             stop_a = None
             stop_b = None
@@ -292,7 +336,7 @@ class TransitLine(object):
                 if a > 0:
                     # if it's a stop, get the zone and reset the stop increment.
                     stop_a          = a
-                    origin_id       = self.node_to_zone[stop_a]
+                    origin_id       = Node.node_to_zone[stop_a]
                     price           = self.board_fare.price
                     cost_increment  = 0
                     stop_b          = None
@@ -308,10 +352,9 @@ class TransitLine(object):
                                 cost_increment += fare.price
                                 price = self.board_fare.price + cost_increment
                                 # WranglerLogger.debug("COST INCREMENT ON LINE %s to $%.2f between %s and %s" % (self.name, float(price)/100, str(origin_id), str(destination_id)))
-
                     if b > 0:
                         stop_b          = b
-                        destination_id  = self.node_to_zone[stop_b]
+                        destination_id  = Node.node_to_zone[stop_b]
                         rule = FastTripsFare(champ_line_name = self.name,price=price,origin_id=origin_id,destination_id=destination_id)
                     else:
                         continue
@@ -330,6 +373,7 @@ class TransitLine(object):
                 
     def setTravelTimes(self, highway_networks, extra_links=None):
         '''
+        This is a function added for fast-trips.
         Takes a dict of links_dicts, with one links_dict for each time-of-day
 
             highway_networks[tod] -> tod_links_dict
@@ -394,8 +438,8 @@ class TransitLine(object):
                     if not found:
                         import math, geocoder
                         WranglerLogger.debug("LINE %s, LINK %s, TOD %s: NO ON-STREET OR OFF-STREET LINK FOUND.  CALCULATING TRAVEL TIME USING MEASURED DISTANCE AND SPEED" % (self.name, link_id, tp))
-                        a_lon, a_lat = self.reproject_to_wgs84(a.x,a.y,EPSG='+init=EPSG:2227')
-                        b_lon, b_lat = self.reproject_to_wgs84(b.x,b.y,EPSG='+init=EPSG:2227')
+                        a_lon, a_lat = reproject_to_wgs84(a.x,a.y,EPSG='+init=EPSG:2227')
+                        b_lon, b_lat = reproject_to_wgs84(b.x,b.y,EPSG='+init=EPSG:2227')
                         if not dist: dist = math.sqrt(math.pow((a.x-b.x),2)+math.pow((a.y-b.y),2))
                         #print a_lon, a_lat, b_lon, b_lat
                         gdist = geocoder.distance((a_lat,a_lon),(b_lat,b_lon))
@@ -452,24 +496,6 @@ class TransitLine(object):
             start_time = random.normalvariate(mean, sd)
         start_time = start_time + time_period_start 
         return start_time
-
-    def reproject_to_wgs84(self, longitude, latitude, EPSG = "+init=EPSG:2926", conversion = 0.3048006096012192):
-        '''
-        Converts the passed in coordinates from their native projection (default is state plane WA North-EPSG:2926)
-        to wgs84. Returns a two item tuple containing the longitude (x) and latitude (y) in wgs84. Coordinates
-        must be in meters hence the default conversion factor- PSRC's are in state plane feet.  
-        '''
-        import pyproj
-        # Remember long is x and lat is y!
-        prj_wgs = pyproj.Proj(init='epsg:4326')
-        prj_sp = pyproj.Proj(EPSG)
-        
-        # Need to convert feet to meters:
-        longitude = longitude * conversion
-        latitude = latitude * conversion
-        x, y = pyproj.transform(prj_sp, prj_wgs, longitude, latitude)
-        
-        return x, y
 
     def writeFastTrips_Shape(self, f, writeHeaders=False):
         '''
