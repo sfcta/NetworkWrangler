@@ -315,18 +315,47 @@ class FarelinksFare(Fare):
         return s        
 
 class FastTripsFare(Fare):
+    '''
+    This is a class added for fast-trips.
+    The fare_id is a unique identifier for a fare in fast-trips, returned by a query on route_id, origin_id, and destination_id.
+    
+    '''
     def __init__(self,fare_id=None,operator=None,line=None,origin_id=None,destination_id=None,
                  contains_id=None,price=None,fare_class=None,start_time=None,end_time=None,
                  transfers=None,transfer_duration=None,
                  champ_line_name=None):
         
-        Fare.__init__(self, fare_id=fare_id, operator=operator, line=line, price=price, transfers=transfers,
-                      transfer_duration=transfer_duration, start_time=start_time, end_time=end_time,
-                      champ_line_name=champ_line_name)
         self.origin_id      = origin_id
         self.destination_id = destination_id
         self.contains_id    = contains_id
+        
+        Fare.__init__(self, fare_id=fare_id, operator=operator, line=line, price=price, transfers=transfers,
+                      transfer_duration=transfer_duration, start_time=start_time, end_time=end_time,
+                      champ_line_name=champ_line_name)
+        
 
+    def setFareId(self, fare_id=None, style='fasttrips', suffix=None):
+        if fare_id:
+            self.fare_id = fare_id
+            return self.fare_id
+        elif self.operator and self.line:
+            operpart = self.operator.lower()
+            linepart = self.line.lower()
+        elif self.champ_line_name:
+            self.setOperatorAndLineFromChamp(self.champ_line_name)
+            operpart = self.operator.lower()
+            linepart = self.line.lower()
+        else:
+            self.fare_id = 'basic'
+            return self.fare_id
+        if self.origin_id and self.destination_id:
+            self.fare_id = '%s_%s_to_%s' % (self.fare_id, str(self.origin_id).lower()[:3], str(self.destination_id).lower()[:3])
+        self.fare_id    = '%s_%s' % (operpart, linepart)
+        if suffix:
+            self.fare_id = '%s_%s' % (self.fare_id, str(suffix))
+            
+        return self.fare_id        
+        
     def __getitem__(self,key): return self[key]
     def __setitem__(self,key,value): self[key]=value
     def __cmp__(self,other):
