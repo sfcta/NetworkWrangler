@@ -41,15 +41,16 @@ FT_OUTPATH  = r'Q:\Model Development\SHRP2-fasttrips\Task2\network_translation\t
 CHAMP_NODE_NAMES = r'Y:\champ\util\nodes.xls'
 
 if __name__=='__main__':
-    test=True
+    test=False
     ask_raw_input=False
     # set up logging
     NOW = time.strftime("%Y%b%d.%H%M%S")
     FT_OUTPATH = os.path.join(FT_OUTPATH,NOW)
-    SHAPES      = os.path.join(FT_OUTPATH,'shapes.txt')
-    TRIPS       = os.path.join(FT_OUTPATH,'trips.txt')
-    STOP_TIMES  = os.path.join(FT_OUTPATH,'stop_times.txt')
-    FARES       = os.path.join(FT_OUTPATH,'dumb_fares.txt')
+    #SHAPES      = 'shapes.txt'          #os.path.join(FT_OUTPATH,'shapes.txt')
+    #TRIPS       = 'trips.txt'           #os.path.join(FT_OUTPATH,'trips.txt')
+    #STOP_TIMES  = 'stop_times.txt'      #os.path.join(FT_OUTPATH,'stop_times.txt')
+    #FARES       = 'dumb_fares.txt'      #os.path.join(FT_OUTPATH,'dumb_fares.txt')
+    
     if not os.path.exists(FT_OUTPATH): os.mkdir(FT_OUTPATH)
                                                                       
     LOG_FILENAME = os.path.join(FT_OUTPATH,"convert_cube_to_fasttrips_%s.info.LOG" % NOW)
@@ -69,6 +70,7 @@ if __name__=='__main__':
         highway_networks[tod] = links_dict
 
     # Get transit network
+    WranglerLogger.debug("Creating transit network.")
     transit_network = TransitNetwork(5.0)
     transit_network.mergeDir(TRN_BASE)
     WranglerLogger.debug("Making FarelinksFares unique")
@@ -77,7 +79,7 @@ if __name__=='__main__':
     nodeNames = getChampNodeNameDictFromFile(os.environ["CHAMP_node_names"])
     transit_network.addStationNamestoODFares(nodeNames)
     WranglerLogger.debug("creating zone ids")
-    zone_to_nodes = transit_network.createZoneIDsFromFares()
+    transit_network.createZoneIDsFromFares()
     WranglerLogger.debug("adding xy to Nodes")
     transit_network.addXY(nodes_dict)
     WranglerLogger.debug("adding first departure times to all lines")
@@ -86,13 +88,16 @@ if __name__=='__main__':
     transit_network.addTravelTimes(highway_networks)
     WranglerLogger.debug("adding fares to lines")
     transit_network.addFaresToLines()
-    transit_network.createLineLevelFares()
-    WranglerLogger.debug("writing lines to shapes.txt")
-    transit_network.writeFastTrips_Shapes(SHAPES)
-    WranglerLogger.debug("writing stop times to stop_times.txt")
-    transit_network.writeFastTrips_Trips(TRIPS,STOP_TIMES)
-    WranglerLogger.debug("writing routes, stops, and fares")
-    transit_network.writeFastTripsFares_dumb(FARES)
+    transit_network.createFastTripsFares()
+    WranglerLogger.debug("writing lines")
+    transit_network.writeFastTrips_Shapes(path=FT_OUTPATH)
+    WranglerLogger.debug("writing stop times")
+    transit_network.writeFastTrips_Trips(path=FT_OUTPATH)
+    WranglerLogger.debug("writing fares")
+    transit_network.writeFastTrips_Fares(path=FT_OUTPATH)
+    WranglerLogger.debug("writing stops")
+    transit_network.createFastTripsNodes()
+    transit_network.writeFastTrips_Stops(path=FT_OUTPATH)
     #transit_network.writeFastTrips_RoutesStopsFares('stops.txt','routes.txt','routes_ft.txt','fare_rules.txt','fare_rules_ft.txt','fare_attributes.txt','fare_attributes_ft.txt','fare_transfer_rules.txt')
 
     if test:
@@ -101,11 +106,11 @@ if __name__=='__main__':
         node_to_zone_file = 'node_to_zone_file_%s.log' % NOW
         ntz = open(node_to_zone_file,'w')
         ntz.write('node,type,zone,type\n')
-        for zone, nodes in zone_to_nodes.iteritems():
+        for zone, nodes in transit_network.zone_to_nodes.iteritems():
             for this_node in nodes:
                 ntz.write('%s,%s,%s,%s\n' % (str(this_node),type(this_node),str(zone),type(zone)))
             overlap_list = []
-            for nodes2 in zone_to_nodes.values():
+            for nodes2 in transit_network.zone_to_nodes.values():
                 for n in nodes:
                     if n in nodes2 and nodes != nodes2 and n not in overlap_list: overlap_list.append(n)        
             WranglerLogger.debug("ZONE: %d HAS %d of %d NODES OVERLAP WITH OTHER ZONES" % (zone, len(overlap_list), len(nodes)))
@@ -152,6 +157,7 @@ if __name__=='__main__':
                             print '%s, %s: Missing BUSTIME for EV' % (line.name, link_values.id)
                         if line['FREQ[5]'] != 0 and 'BUSTIME_EA' not in link_values.keys():
                             print '%s, %s: Missing BUSTIME for EA' % (line.name, link_values.id)
-                    
+        transit_network.writeFastTripsFares_dumb(path=FT_OUTPATH)
+        
 ##        for id in transit_network.line("MUN5I").links:
 ##            print id, transit_network.line("MUN5I")
