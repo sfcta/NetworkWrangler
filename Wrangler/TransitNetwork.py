@@ -1049,6 +1049,7 @@ class TransitNetwork(Network):
         # add all nodes that occur in any line, regardless of whether they are stops. Any nodes
         # that are a stop in one line, and not a stop in another will be duplicated.
         for line in self.lines:
+            if isinstance(line,str): continue
             for n in line.n:
                 if not isinstance(n,Node):
                     if isinstance(n,int): raise NetworkExcetption('LINE %s HAS INTEGER NODE.  ALL NODES SHOULD BE OF TYPE NODE.' % line.name)
@@ -1094,16 +1095,15 @@ class TransitNetwork(Network):
         df_stops = None
         df_stops_ft = None
 
-        for node in self.fasttrips_nodes:
+        for nodekey, node in self.fasttrips_nodes.iteritems():
             if node.isStop():
                 df_row = node.asDataFrame('stop_id','stop_name','stop_lat','stop_lon','zone_id')
-                print df_row
-                if not df_stops:
+                if not isinstance(df_stops,pd.DataFrame):
                     df_stops = df_row
                 else:
-                    df_stops = df.append(df_row)
+                    df_stops = df_stops.append(df_row)
                 df_row = node.asDataFrame('stop_id')
-                if not df_stops_ft:
+                if not isinstance(df_stops_ft,pd.DataFrame):
                     df_stops_ft = df_row
                 else:
                     df_stops_ft = df_stops_ft.append(df_row)

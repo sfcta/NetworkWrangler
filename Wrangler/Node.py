@@ -1,4 +1,5 @@
 import os,sys
+from .Logger import WranglerLogger
 from .HelperFunctions import *
 
 __all__ = ['Node']
@@ -164,11 +165,11 @@ class FastTripsNode(Node):
     FastTrips Node Class.
     '''
     def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None):
-        Fare.__init__(n,champ_coord_dict)
+        Node.__init__(self,n,champ_coord_dict)
 
         # stops.txt req'd
         self.stop_id        = abs(int(n))
-        self.stop_name      = Node.descriptions(self.stop_id) if self.stop_id in Node.descriptions.keys() else str(self.stop_id)
+        self.stop_name      = Node.descriptions[self.stop_id] if self.stop_id in Node.descriptions.keys() else str(self.stop_id)
         if stop_lat and stop_lon:
             self.stop_lat = stop_lat
             self.stop_lon = stop_lon
@@ -178,10 +179,12 @@ class FastTripsNode(Node):
         # stops optional
         self.stop_code              = None
         self.stop_desc              = None
-        if Node.node_to_zone and self.stop_id in Node.node_to_zone.keys():
+        if len(Node.node_to_zone) == 0:
+            WranglerLogger.warn("Trying to construct a FastTripsNode without ZONE_ID")
+        elif self.stop_id in Node.node_to_zone.keys():
             self.zone_id            = Node.node_to_zone[self.stop_id]
         else:
-            WranglerLogger.warn("Trying to construct a FastTripsNode without ZONE_ID")
+            self.zone_id            = None
         self.location_type          = None
         self.parent_station         = None
         self.stop_timezone          = None
