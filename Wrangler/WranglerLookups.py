@@ -66,3 +66,88 @@ class WranglerLookups:
                            '84_': "golden_gate_transit",
                            '90_': "ferry", '91_': "ferry", '92_': "ferry", '93_': "ferry", '94_': "ferry", '95_': "ferry",
                            'EBA': "ebart", 'MUN': "sf_muni", 'PRES': "presidigo", 'SFS': "sfsu_shuttle",}
+
+    MODENUM_TO_FTMODETYPE = {11:'local_bus',
+                             12:'express_bus',
+                             13:'rapid_bus',
+                             14:'cable_car',
+                             15:'light_rail',
+                             16:'open_shuttle',
+                             17:'local_bus',
+                             18:'local_bus',
+                             19:'local_bus',
+                             20:'rapid_bus',
+                             21:'light_rail',
+                             22:'premium_bus',
+                             23:'premium_bus',
+                             24:'premium_bus',
+                             25:'premium_bus',
+                             26:'commuter_rail',
+                             27:'regional_rail',
+                             28:'regional_rail',
+                             29:'inter_regional_rail',
+                             30:'high_speed_rail',
+                             31:'ferry',
+                             32:'heavy_rail'}
+
+        ##Service type:
+        ##0 - Tram, streetcar, light rail
+        ##1 - Subway, metro
+        ##2 - Rail
+        ##3 - Bus
+        ##4 - Ferry
+        ##5 - Cable car
+        ##6 - Gondola
+        ##7 - Funicular
+    MODENUM_TO_FTROUTETYPE = {11:3, # 'local_bus',
+                              12:3, # 'express_bus',
+                              13:3, # 'rapid_bus',
+                              14:5, # 'cable_car',
+                              15:0, # 'light_rail',
+                              16:3, # 'open_shuttle',
+                              17:3, # 'local_bus',
+                              18:3, # 'local_bus',
+                              19:3, # 'local_bus',
+                              20:3, # 'rapid_bus',
+                              21:0, # 'light_rail',
+                              22:3, # 'premium_bus',
+                              23:3, # 'premium_bus',
+                              24:3, # 'premium_bus',
+                              25:3, # 'premium_bus',
+                              26:2, # 'commuter_rail',
+                              27:2, # 'regional_rail',
+                              28:2, # 'regional_rail',
+                              29:2, # 'inter_regional_rail',
+                              30:2, # 'high_speed_rail',
+                              31:4, # 'ferry',
+                              32:1, # 'heavy_rail'}
+                              }
+
+    MODENUM_TO_PROOF = {11:1, # {'desc':"Local Muni", 'type':"local bus"},
+                        12:1, # {'desc':"Express Muni", 'type':"local bus"},
+                        13:1, # {'desc':"BRT Muni", 'type':"local bus"},
+                        14:0, # {'desc':"Muni Cable Car", 'type':"LRT"},
+                        15:1, # {'desc':"LRT Muni", 'type':"LRT"},
+                        16:1, # {'desc':"Free and Open Shuttles", 'type':"local bus"},
+                        17:0, # {'desc':"SamTrans Local", 'type':"local bus"},
+                        18:0, # {'desc':"AC Local", 'type':"local bus"},
+                        19:0, # {'desc':"Other Local MTC Buses", 'type':"local bus"},
+                        20:1, # {'desc':"Regional BRT", 'type':"BRT"},
+                        21:1, # {'desc':"VTA LRT", 'type':"LRT"},
+                        22:0, # {'desc':"AC Transbay Buses", 'type':"Premium"},
+                        23:0, # {'desc':"Golden Gate Bus", 'type':"Premium"},
+                        24:0, # {'desc':"Sam Trans Express Bus", 'type':"Premium"},
+                        25:0, # {'desc':"Other Premium Bus", 'type':"Premium"},
+                        26:1, # {'desc':"Caltrain", 'type':"Premium"},
+                        27:1, # {'desc':"SMART", 'type':"Premium"},
+                        28:1, # {'desc':"eBART", 'type':"Premium"},
+                        29:0, # {'desc':"Regional Rail/ACE/AMTRAK", 'type':"Premium"},
+                        30:0, # {'desc':"HSR", 'type':"Premium"},
+                        31:1, # {'desc':"Ferry", 'type':"Ferry"},
+                        32:1, # {'desc':"BART", 'type':"BART"},
+                        }
+                              
+    LINENUM_TO_LINENAME = {'muni':{},
+                           'ac_transit':{},
+                           'vta':{},
+                           }

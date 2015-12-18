@@ -9,7 +9,7 @@ from .PNRLink import PNRLink
 from .Regexes import nodepair_pattern
 from .TransitAssignmentData import TransitAssignmentData, TransitAssignmentDataException
 from .TransitCapacity import TransitCapacity
-from .TransitLine import TransitLine
+from .TransitLine import TransitLine, FastTripsTransitLine
 from .TransitLink import TransitLink
 from .TransitParser import TransitParser, transit_file_def
 from .Fare import ODFare, XFFare, FarelinksFare
@@ -732,6 +732,15 @@ class TransitNetwork(Network):
     def initializeTransitCapacity(directory="."):
         TransitNetwork.capacity = TransitCapacity(directory=directory)
 
+    def convertTransitLinesToFastTripsTransitLines(self):
+        for line, idx in zip(self.lines,range(len(self.lines))):
+            if isinstance(line, TransitLine):
+                newline = FastTripsTransitLine(name=line.name,template=line)
+                self.lines[idx] = newline
+        for line in self.lines:
+            if not isinstance(line, FastTripsTransitLine) and not isinstance(line, str):
+                raise NetworkException('failed to convert')
+            
     def makeFarelinksUnique(self):
         '''
         This is a function added for fast-trips.
@@ -867,7 +876,30 @@ class TransitNetwork(Network):
             elif isinstance(line, TransitLine):
                 line.writeFastTrips_Trips(f_trips, f_stoptimes, id_generator, writeHeaders)
                 writeHeaders = False # only write them the with the first line.
-                
+
+    def writeFastTrips_Routes(self, f_routes='routes.txt', f_routes_ft='routes_ft.txt', path='.', writeHeaders=True):
+        '''
+        This is a function added for fast-trips.
+        '''
+        df_routes       = None
+        df_routes_ft    = None
+
+        for line in self.lines:
+            if isinstance(line, TransitLine):
+                df_row = line.asDataFrame('route_id','agency_id','route_short_name','route_long_name','route_type')
+                if not isinstance(df_routes,pd.DataFrame):
+                    df_routes = df_row
+                else:
+                    df_routes = df_routes.append(df_row)
+                df_row = line.asDataFrame('route_id','mode','fare_class','proof_of_payment')
+                if not isinstance(df_routes_ft,pd.DataFrame):
+                    df_routes_ft = df_row
+                else:
+                    df_routes_ft = df_routes_ft.append(df_row)
+                    
+        df_routes.to_csv(os.path.join(path,f_routes),index=False,header=writeHeaders)
+        df_routes_ft.to_csv(os.path.join(path,f_routes_ft),index=False,header=writeHeaders)
+        
     def getLeftAndRightTransitNodeNums(self,farelink,stops_only=True):
         '''
         This is a function added for fast-trips.
@@ -1060,23 +1092,51 @@ class TransitNetwork(Network):
         self.fasttrips_nodes = nodes
             
     def writeFastTrips_Fares(self,f_farerules='fare_rules.txt',f_farerules_ft='fare_rules_ft.txt',
-                             f_fareattr='fare_attributes_ft.txt',fare_attr_ft='fare_attributes_ft.txt',
+                             f_fareattr='fare_attributes.txt',fare_attr_ft='fare_attributes_ft.txt',
                              path='.', writeHeaders=True):
         ##f_farerules     = openFileOrString(f_farerules)
-        f_farerules_ft  = openFileOrString(os.path.join(path,f_farerules_ft))
-        farerules_df = pd.DataFrame(columns=['fare_id','route_id','origin_id','destination_id','contains_id'])
-        
-        if writeHeaders:
-            #f_farerules.write('fare_id,route_id,origin_id,destination_id,contains_id\n')
-            f_farerules_ft.write('fare_id,fare_class,start_time,end_time\n')
+        ##f_farerules_ft  = openFileOrString(os.path.join(path,f_farerules_ft))
+        ##df_farerules    = pd.DataFrame(columns=['fare_id','route_id','origin_id','destination_id','contains_id'])
+        df_farerules    = None
+        df_farerules_ft = None
+        df_fareattrs    = None
+
         for fare in self.fasttrips_fares:
-            farerules_row = pd.DataFrame(columns=['fare_id','route_id','origin_id','destination_id','contains_id'],
-                                         data=[[fare.fare_id,fare.line,fare.origin_id,fare.destination_id,fare.contains_id]])
-            farerules_df = farerules_df.append(farerules_row)
-            #f_farerules.write('%s,%s,%s,%s,%s\n' % (fare.fare_id,fare.linename,fare.origin_id,fare.destination_id,fare.contains_id))
-            f_farerules_ft.write('%s,%s,%s,%s\n' % (fare.fare_id,fare.fare_class,fare.start_time,fare.end_time))
-        farerules_df = farerules_df.drop_duplicates()
-        farerules_df.to_csv(os.path.join(path,f_farerules),index=False)
+            df_row = fare.asDataFrame('fare_id','route_id','origin_id','destination_id','contains_id')
+            if not isinstance(df_farerules, pd.DataFrame):
+                df_farerules = df_row
+            else:
+                df_farerules = df_farerules.append(df_row)
+            df_row = fare.asDataFrame('fare_id','fare_class','start_time','end_time')
+            if not isinstance(df_farerules_ft, pd.DataFrame):
+                df_farerules_ft = df_row
+            else:
+                df_farerules_ft = df_farerules_ft.append(df_row)
+            df_row = fare.asDataFrame('fare_id','price','currency_type','payment_method','transfers','transfer_duration')
+            if not isinstance(df_fareattrs, pd.DataFrame):
+                df_fareattrs = df_row
+            else:
+                df_fareattrs = df_fareattrs.append(df_row)
+                
+        df_farerules = df_farerules.drop_duplicates()
+        df_farerules_ft = df_farerules_ft.drop_duplicates()
+        df_fareattrs = df_fareattrs.drop_duplicates()
+        df_farerules.to_csv(os.path.join(path, f_farerules),index=False,headers=writeHeaders)
+        df_farerules_ft.to_csv(os.path.join(path,f_farerules_ft),index=False,headers=writeHeaders)
+        df_fareattrs.to_csv(os.path.join(path,f_fareattr),index=False,header=writeHeaders)
+        
+##        if writeHeaders:
+##            #f_farerules.write('fare_id,route_id,origin_id,destination_id,contains_id\n')
+##            f_farerules_ft.write('fare_id,fare_class,start_time,end_time\n')
+##        for fare in self.fasttrips_fares:
+##            farerules_row = pd.DataFrame(columns=['fare_id','route_id','origin_id','destination_id','contains_id'],
+##                                         data=[[fare.fare_id,fare.route_id,fare.origin_id,fare.destination_id,fare.contains_id]])
+##            farerules_df = farerules_df.append(farerules_row)
+##            #f_farerules.write('%s,%s,%s,%s,%s\n' % (fare.fare_id,fare.linename,fare.origin_id,fare.destination_id,fare.contains_id))
+##            f_farerules_ft.write('%s,%s,%s,%s\n' % (fare.fare_id,fare.fare_class,fare.start_time,fare.end_time))
+##            
+##        farerules_df = farerules_df.drop_duplicates()
+##        farerules_df.to_csv(os.path.join(path,f_farerules),index=False)
         
     def writeFastTrips_Transfers(self):
         pass
@@ -1107,8 +1167,8 @@ class TransitNetwork(Network):
                     df_stops_ft = df_row
                 else:
                     df_stops_ft = df_stops_ft.append(df_row)
-        df_stops.to_csv(f_stops,index=False,header=writeHeaders)
-        df_stops_ft.to_csv(f_stops_ft,index=False,header=writeHeaders)
+        df_stops.to_csv(os.path.join(path,f_stops),index=False,header=writeHeaders)
+        df_stops_ft.to_csv(os.path.join(path,f_stops_ft),index=False,header=writeHeaders)
 
     def writeFastTrips_RoutesStopsFares(f_stops='stops.txt',f_stops_ft='stops_ft.txt',f_routes='routes.txt',f_routes_ft='routes_ft.txt',f_farerules='fare_rules.txt',
                                         f_farerules_ft='fare_rules_ft.txt',f_fareattr='fare_attributes.txt',f_fareattr_ft='fare_attributes_ft.txt',

@@ -1,11 +1,13 @@
 import copy
 import itertools
 from .NetworkException import NetworkException
-from .Node import Node
+from .Node import Node, FastTripsNode
 from .Logger import WranglerLogger
 from .TransitLink import TransitLink
 from .Fare import Fare, ODFare, XFFare, FarelinksFare, FastTripsFare
+from .WranglerLookups import WranglerLookups
 from .HelperFunctions import *
+from .Regexes import *
 
 __all__ = ['TransitLine']
 
@@ -73,11 +75,11 @@ class TransitLine(object):
         self.n = []
         self.links = {} # Links were built for supplinks, xfers, but can be extended to all links.  Including here as a way to store stop-stop travel times by time-of-day
         self.comment = None
+        self.name = name
         self.board_fare = None
         self.farelinks = []
         self.od_fares = []
-        ##self.node_to_zone = {}
-        self.name = name
+
         if name and name.find('"')==0:
             self.name = name[1:-1]  # Strip leading/trailing dbl-quotes
 
@@ -104,6 +106,8 @@ class TransitLine(object):
 
         self.currentStopIdx += 1
         return int(self.n[self.currentStopIdx-1].num)
+
+
 
     def setFreqs(self, freqs, timepers=None, allowDowngrades=True):
         '''Set some or all five headways (AM,MD,PM,EV,EA)
@@ -179,20 +183,6 @@ class TransitLine(object):
 
     def setDistances(self, highway_networks, extra_links=None):
         pass
-
-##    def addZones(self, node_to_zone):
-##        for n in node_to_zone.keys():
-##            if not isinstance(n, int): raise NetworkException("NOT ALL NODES ARE INTEGERS")
-##            if n <= 0: raise NetworkException("NOT ALL NODES ARE POSITIVE INTEGERS")
-##                
-##        for n in self.n:
-##            absn = abs(int(n.num))
-##            if absn in node_to_zone.keys():
-##                self.node_to_zone[absn] = node_to_zone[absn]
-##                n.zone = node_to_zone[absn]
-##            else:
-##                self.node_to_zone[absn] = None
-##                n.zone = None
                 
     def addFares(self, od_fares=None, xf_fares=None, farelinks_fares=None):
         '''
@@ -321,8 +311,9 @@ class TransitLine(object):
         if self.hasODFares():
             for fare in self.od_fares:
                 if isinstance(fare, ODFare):
-                    rule = FastTripsFare(champ_line_name=self.name,price=self.board_fare.price + fare.price,origin_id=fare.fr_name,destination_id=fare.to_name)
-                    WranglerLogger.debug('%s' % str(rule))
+                    modenum = int(self.attr['MODE'])
+                    rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum,price=self.board_fare.price + fare.price,origin_id=fare.fr_name,destination_id=fare.to_name)
+                    ##WranglerLogger.debug('%s' % str(rule))
                     if rule not in rules:
                         rules.append(rule)
                     
@@ -355,7 +346,8 @@ class TransitLine(object):
                     if b > 0:
                         stop_b          = b
                         destination_id  = Node.node_to_zone[stop_b]
-                        rule = FastTripsFare(champ_line_name = self.name,price=price,origin_id=origin_id,destination_id=destination_id)
+                        modenum = int(self.attr['MODE'])
+                        rule = FastTripsFare(champ_line_name = self.name,champ_mode=modenum, price=price,origin_id=origin_id,destination_id=destination_id)
                     else:
                         continue
                     if rule == last_rule: continue
@@ -366,7 +358,8 @@ class TransitLine(object):
             # origin_id and destination_id only matter for lines that cross farelinks.
             origin_id       = None
             destination_id  = None
-            rule = FastTripsFare(champ_line_name=self.name,price=self.board_fare.price,origin_id=origin_id,destination_id=destination_id)
+            modenum = int(self.attr['MODE'])
+            rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum, price=self.board_fare.price,origin_id=origin_id,destination_id=destination_id)
             rules.append(rule)
                 
         return rules
@@ -521,7 +514,7 @@ class TransitLine(object):
                 
         # write the last node
         f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].y, self.n[-1].x, seq, cum_dist))
-
+    
     def writeFastTrips_Trips(self, f_trips, f_stoptimes, id_generator, writeHeaders=False):
         '''
         Writes fast-trips style stop_times records for this line.
@@ -567,7 +560,7 @@ class TransitLine(object):
                             print cum_time, stop_time, departure, seq
                 departure += headway
                 f_stoptimes.write('%d,%d,%d,%d,%d\n' % (trip_id, stop_time, stop_time, b_node, seq))
-    
+                
     def hasService(self):
         """
         Returns true if any frequency is nonzero.
@@ -896,12 +889,16 @@ class TransitLine(object):
             return node_ids.index(int(node.num))
         else:
             raise NetworkException("WARNING: Invalid value for node: %s" % str(node))
-        
+    
     def _applyTemplate(self, template):
         '''Copy all attributes (including nodes) from an existing transit line to this line'''
         self.attr = copy.deepcopy(template.attr)
+        self.otherattr = copy.deepcopy(template.otherattr)
         self.n = copy.deepcopy(template.n)
         self.comment = template.comment
+        self.board_fare = copy.deepcopy(template.board_fare)
+        self.farelinks = copy.deepcopy(template.farelinks)
+        self.od_fares = copy.deepcopy(template.od_fares)
 
     # Dictionary methods
     def __getitem__(self,key): return self.attr[key.upper()]
@@ -928,3 +925,150 @@ class TransitLine(object):
     def __str__(self):
         s = 'Line name \"%s\" freqs=%s' % (self.name, str(self.getFreqs()))
         return s
+
+class FastTripsTransitLine(TransitLine):
+    def __init__(self, name=None, template=None):
+        TransitLine.__init__(self, name, template)
+        # routes req'd
+        self.route_id = self.name       # keep the CHAMP name as the id
+        self.route_short_name = None
+        self.route_long_name = None
+        self.route_type = None
+
+        # routes optional
+        self.agency_id = None
+        self.route_desc = None
+        self.route_url = None
+        self.route_color = None
+        self.route_text_color = None
+
+        # routes_ft req'd
+        self.mode = None
+        self.proof_of_payment = None
+
+        # routes_ft optional
+        self.fare_class = None
+
+        self.setRouteNameAndAgency()
+        self.setRouteType()
+        self.setMode()
+        self.setProofOfPayment()
+        if self.board_fare: self.setFareClass()
+
+    def setRouteId(self, route_id=None):
+        if route_id:
+            self.route_id = route_id
+            return self.route_id
+
+    def setRouteNameAndAgency(self):
+        m = linename_pattern.match(self.name)
+        if not m: raise NetworkException('Failed to match linename_pattern on %s' % self.name)
+        self.agency_id = WranglerLookups.OPERATOR_ID_TO_NAME[m.groupdict()['operator']]
+        self.route_short_name = m.groupdict()['line']
+        if m.groupdict()['direction']:
+            self.route_long_name = '%s_%s' % (m.groupdict()['line'], m.groupdict()['direction'])
+        else:
+            self.route_long_name = self.route_short_name
+        
+    def setRouteShortName(self, route_short_name=None):
+        if route_short_name:
+            self.route_short_name = route_short_name
+            return self.route_short_name
+        m = linename_pattern.match(self.name)
+        self.route_short_name = m.groupdict()['line']
+        return self.route_short_name
+    
+    def setRouteLongName(self, route_long_name=None):
+        if route_long_name:
+            self.route_long_name = route_long_name
+            return self.route_long_name
+        m = linename_pattern.match(self.name)
+        if m.groupdict()['direction']:
+            self.route_long_name = '%s_%s' % (m.groupdict()['line'], m.groupdict()['direction'])
+        else:
+            self.route_long_name = m.groupdict()['line']
+        return self.route_long_name
+    
+    def setRouteType(self, route_type=None):
+        if route_type:
+            self.route_type = route_type
+        else:
+            self.route_type = WranglerLookups.MODENUM_TO_FTROUTETYPE[int(self.attr['MODE'])]
+        return self.route_type
+    
+    def setAgencyId(self, agency_id=None):
+        if agency_id:
+            self.agency_id = agency_id
+            return self.agency_id
+        m = linename_pattern.match(self.name)
+        self.agency_id = m.groupdict()['operator']
+        return self.agency_id
+
+    def setMode(self, mode=None):
+        if mode:
+            self.mode = mode
+        else:
+            self.mode = WranglerLookups.MODENUM_TO_FTMODETYPE[int(self.attr['MODE'])]
+        return self.mode
+
+    def setFareClass(self, fare_class=None):
+        if fare_class:
+            self.fare_class = fare_class
+            return self.fare_class
+        ft_fares = self.getFastTripsFares_asList()
+        if len(ft_fares) == 1:
+            self.fare_class = ft_fares[0].fare_class
+        else:
+            self.fare_class = None
+        return self.fare_class
+
+    def setProofOfPayment(self, proof_of_payment=None):
+        if proof_of_payment:
+            if proof_of_payment not in (0,1,True,False): raise NetworkException("Invalid proof_of_payment value %s" % str(proof_of_payment))
+            self.proof_of_payment = proof_of_payment
+        else:
+            self.proof_of_payment = WranglerLookups.MODENUM_TO_PROOF[int(self.attr['MODE'])]
+
+
+    def writeFastTrips_Shape(self, f, writeHeaders=False):
+        '''
+        Writes fast-trips style shapes record for this line.
+            shape_id, shape_pt_lat, shape_pt_long, shape_pt_sequence, shape_dist_traveled (optional)
+            <string>  <float>       <float>        <integer>          <float>
+        Writes a header if writeHeaders = True
+        '''
+        cum_dist = 0
+        track_dist = True
+        seq = 1
+        if writeHeaders: f.write('shape_id,shape_pt_lat,shape_pt_long,shape_pt_sequence,shape_dist_traveled\n')
+        
+        for a, b in zip(self.n[:-1],self.n[1:]):
+            if not isinstance(a, Node) or not isinstance(b, Node):
+                ex = "Not all nodes in line %s are type Node" % self.name
+                WranglerLogger.debug(ex)
+                raise NetworkException(ex)
+            else:
+                a_node, b_node = abs(int(a.num)), abs(int(b.num))
+                f.write('%s,%f,%f,%d,%f\n' % (self.name, a.stop_lat ,a.stop_lon, seq, cum_dist))
+                seq += 1
+                
+        # write the last node
+        f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].stop_lat, self.n[-1].stop_lon, seq, cum_dist))
+
+    def asDataFrame(self, *args):
+        import pandas as pd
+        if args is None:
+            args = ['stop_id','stop_name','stop_lat','stop_lon','zone_id']
+        data = []        
+        for arg in args:
+            data.append(getattr(self,arg))
+
+        df = pd.DataFrame(columns=args,data=[data])
+        return df
+    
+    def _applyTemplate(self, template):
+        TransitLine._applyTemplate(self, template)
+        for n, idx in zip(self.n, range(len(self.n))):
+            if isinstance(n, Node):
+                new_n = FastTripsNode(int(n.num),template=n)
+                self.n[idx] = new_n

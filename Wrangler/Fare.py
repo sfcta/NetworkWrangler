@@ -15,7 +15,8 @@ class Fare(object):
     Fare. Behaves like a dictionary of attributes.
     """
     
-    def __init__(self, fare_id=None, operator=None, line=None, price=None, tod=None, transfers=None, transfer_duration=None, start_time=None, end_time=None, champ_line_name=None):
+    def __init__(self, fare_id=None, operator=None, line=None, mode=None, price=None, tod=None, transfers=None, transfer_duration=None,
+                 start_time=None, end_time=None, champ_line_name=None, champ_mode=None):
         self.attr = {}
         self.fare_id = fare_id
 
@@ -24,6 +25,9 @@ class Fare(object):
         self.fare_class         = None          # calculated
         self.operator           = operator
         self.line               = line
+        self.mode               = mode
+        self.champ_mode         = int(champ_mode) if champ_mode else None
+        if not self.mode and self.champ_mode: self.mode = WranglerLookups.MODENUM_TO_FTMODETYPE[self.champ_mode]
         self.champ_line_name    = champ_line_name
         self.price              = int(price) if price else 0   # passed by argument
         self.currency_type      = 'USD'         # default value
@@ -44,6 +48,16 @@ class Fare(object):
         self.line       = linename_dict['line']
             
     def setFareId(self, fare_id=None, style='fasttrips', suffix=None):
+        '''
+        This is a function added for fast-trips.
+
+        regular local fare:
+            fare_id: opername_modetype
+            fare_class: opername_modetype_allday
+        zonal fare:
+            fare_id: opername_modetype_2Z (where x is number of zones crossed)
+            fare_class: opername_modetype_2Z_allday
+        '''
         if fare_id:
             self.fare_id = fare_id
             return self.fare_id
@@ -55,16 +69,19 @@ class Fare(object):
             operpart = self.operator
             linepart = self.line
         else:
-            self.fare_id = 'basic'
+            self.fare_id = 'local'
             return self.fare_id
-        
-        self.fare_id    = '%s_%s' % (operpart, linepart)
+        typepart = 'local'
+        self.fare_id    = '%s_%s' % (operpart, typepart)
         if suffix:
             self.fare_id = '%s_%s' % (self.fare_id, str(suffix))
             
         return self.fare_id
 
     def setFareClass(self, fare_class=None, style='fasttrips', suffix=None):
+        if fare_class:
+            self.fare_class = fare_class
+            return self.fare_class
         if self.fare_id:
             self.fare_class = self.fare_id
         else:
@@ -323,18 +340,32 @@ class FastTripsFare(Fare):
     def __init__(self,fare_id=None,operator=None,line=None,origin_id=None,destination_id=None,
                  contains_id=None,price=None,fare_class=None,start_time=None,end_time=None,
                  transfers=None,transfer_duration=None,
-                 champ_line_name=None):
+                 champ_line_name=None, champ_mode=None):
         
+        self.route_id       = champ_line_name
         self.origin_id      = origin_id
         self.destination_id = destination_id
         self.contains_id    = contains_id
         
         Fare.__init__(self, fare_id=fare_id, operator=operator, line=line, price=price, transfers=transfers,
                       transfer_duration=transfer_duration, start_time=start_time, end_time=end_time,
-                      champ_line_name=champ_line_name)
+                      champ_line_name=champ_line_name, champ_mode=champ_mode)
         
-
+    def setModeType(self, modenum):
+        self.fasttrips_mode = WranglerLookups.MODENUM_TO_FTMODETYPE[modenum]
+        return self.fasttrips_mode
+    
     def setFareId(self, fare_id=None, style='fasttrips', suffix=None):
+        '''
+        This is a function added for fast-trips.
+        
+        regular local fare:
+            fare_id: opername_modetype
+            fare_class: opername_modetype_allday
+        zonal fare:
+            fare_id: opername_modetype_2Z (where x is number of zones crossed)
+            fare_class: opername_modetype_2Z_allday
+        '''
         if fare_id:
             self.fare_id = fare_id
             return self.fare_id
@@ -348,14 +379,30 @@ class FastTripsFare(Fare):
         else:
             self.fare_id = 'basic'
             return self.fare_id
+
+        ##modepart = 'local_bus' if not self.mode else self.mode
+        modepart = self.mode
+        self.fare_id    = '%s_%s' % (operpart, modepart)
+        
         if self.origin_id and self.destination_id:
-            self.fare_id = '%s_%s_to_%s' % (self.fare_id, str(self.origin_id).lower()[:3], str(self.destination_id).lower()[:3])
-        self.fare_id    = '%s_%s' % (operpart, linepart)
+            self.fare_id = '%s_zone_%s_to_%s' % (self.fare_id, str(self.origin_id).lower()[:3], str(self.destination_id).lower()[:3])
+
         if suffix:
             self.fare_id = '%s_%s' % (self.fare_id, str(suffix))
             
         return self.fare_id        
-        
+
+    def asDataFrame(self, *args):
+        import pandas as pd
+        if args is None:
+            args = ['stop_id','stop_name','stop_lat','stop_lon','zone_id']
+        data = []        
+        for arg in args:
+            data.append(getattr(self,arg))
+
+        df = pd.DataFrame(columns=args,data=[data])
+        return df
+    
     def __getitem__(self,key): return self[key]
     def __setitem__(self,key,value): self[key]=value
     def __cmp__(self,other):

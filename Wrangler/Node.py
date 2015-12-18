@@ -1,4 +1,4 @@
-import os,sys
+import os,sys,copy
 from .Logger import WranglerLogger
 from .HelperFunctions import *
 
@@ -24,21 +24,25 @@ class Node(object):
     offstreet_nodes     = []
     descriptions_read   = False
 
-    def __init__(self, n, coord_dict=None):
+    def __init__(self, n, coord_dict=None, template=None):
+        self.comment = None
         self.attr = {}
+        
+        if template: self._applyTemplate(template)
+        
         if isinstance(n,int):
             self.num = str(n)
         else:
             self.num = n            
         self.stop=(self.num.find('-')<0 and True or False)
 
-        Node.getDescriptions()
-        self.comment = None     
+        Node.getDescriptions()  
 
         if isinstance(coord_dict, dict):
             (self.x,self.y) = coord_dict[abs(int(n))]
         else:
             (self.x,self.y) = (-1,-1)
+        
 
     def addXY(self, coords):
         """
@@ -159,13 +163,21 @@ class Node(object):
     def setOffStreetNodes(offstreet_nodes):
         if not isinstance(offstreet_nodes, list): raise NetworkException("INVALID OFFSTREET_NODES LIST")
         Node.offstreet_nodes = offstreet_nodes
+
+    def _applyTemplate(self, template):
+        self.attr   = copy.deepcopy(template.attr)
+        self.x      = copy.deepcopy(template.x)
+        self.y      = copy.deepcopy(template.y)
+        self.num    = copy.deepcopy(template.num)
+        self.comment = copy.deepcopy(template.comment)
+        self.stop   = copy.deepcopy(template.stop)
         
 class FastTripsNode(Node):
     '''
     FastTrips Node Class.
     '''
-    def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None):
-        Node.__init__(self,n,champ_coord_dict)
+    def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None, template=None):
+        Node.__init__(self,n,champ_coord_dict,template)
 
         # stops.txt req'd
         self.stop_id        = abs(int(n))
@@ -179,9 +191,9 @@ class FastTripsNode(Node):
         # stops optional
         self.stop_code              = None
         self.stop_desc              = None
-        if len(Node.node_to_zone) == 0:
-            WranglerLogger.warn("Trying to construct a FastTripsNode without ZONE_ID")
-        elif self.stop_id in Node.node_to_zone.keys():
+##        if len(Node.node_to_zone) == 0:
+##            WranglerLogger.warn("Trying to construct a FastTripsNode without ZONE_ID")
+        if self.stop_id in Node.node_to_zone.keys():
             self.zone_id            = Node.node_to_zone[self.stop_id]
         else:
             self.zone_id            = None
@@ -203,6 +215,17 @@ class FastTripsNode(Node):
         self.level                  = None
         self.off_board_payment      = None
 
+    def addXY(self, coords):
+        """
+        takes an (x,y) tuple or a dict of node numbers to (x,y) tuples
+        """
+        n = abs(int(self.num))
+        if isinstance(coords, tuple):
+            (self.x, self.y) = coords
+        elif isinstance(coords, dict):
+            (self.x, self.y) = coords[n]
+        self.stop_lon, self.stop_lat = reproject_to_wgs84(self.x,self.y,EPSG='+init=EPSG:2227')
+        
     def asDataFrame(self, *args):
         import pandas as pd
         if args is None:
