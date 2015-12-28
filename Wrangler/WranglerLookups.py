@@ -1,4 +1,59 @@
 class WranglerLookups:
+
+    ALL_TIMEPERIODS = ["AM","MD","PM","EV","EA"]
+    
+    HOURS_PER_TIMEPERIOD = {"AM":3.0, #what about 4-6a?
+                            "MD":6.5,
+                            "PM":3.0,
+                            "EV":8.5,
+                            "EA":3.0
+                            }
+    
+    MINUTES_PAST_MIDNIGHT = {"AM":360, # 6am - 9am
+                             "MD":540, # 9am - 3:30pm
+                             "PM":930, # 3:30pm - 6:30pm
+                             "EV":1110,# 6:30pm - 3am
+                             "EA":180, # 3am - 6am
+                             }
+
+    TIMEPERIOD_TO_TIMERANGE = {'AM':('060000','085959'),
+                               'MD':('090000','152959'),
+                               'PM':('153000','182959'),
+                               'EV':('183000','270000'),
+                               'EA':('030000','055959')}
+    
+    MODETYPE_TO_MODES = {"Local":[11,12,16,17,18,19],
+                         "BRT":[13,20],
+                         "LRT":[14,15,21],
+                         "Premium":[22,23,24,25,26,27,28,29,30],
+                         "Ferry":[31],
+                         "BART":[32]
+                         }
+    
+    # Do these modes have offstreet stops?
+    MODENUM_TO_OFFSTREET = {11:False, # muni bus
+                            12:False, # muni Express bus
+                            13:False, # mun BRT
+                            14:False, # cable car -- These are special because they don't have explicity WNR nodes
+                            15:False, # LRT       -- and are just implemented by reading the muni.xfer line as muni.access
+                            16:False, # Shuttles
+                            17:False, # SamTrans bus
+                            18:False, # AC bus
+                            19:False, # other local bus
+                            20:False, # Regional BRT
+                            21:True,  # Santa Clara LRT
+                            22:False, # AC premium bus
+                            23:False, # GG premium bus
+                            24:False, # SamTrans premium bus
+                            25:False, # Other premium bus
+                            26:True,  # Caltrain
+                            27:True,  # SMART
+                            28:True,  # eBART
+                            29:True,  # Regional Rail/ACE/Amtrak
+                            30:True,  # HSR
+                            31:True,  # Ferry
+                            32:True   # BART
+                            }
     
     MODE_TO_MODETYPE = {1:{'desc':"walk access", 'type':"non-transit"},
                         2:{'desc':"walk egress", 'type':"non-transit"},

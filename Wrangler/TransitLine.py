@@ -20,55 +20,6 @@ class TransitLine(object):
         thisroute['MODE']='5'
 
     """
-    ALL_TIMEPERIODS = ["AM","MD","PM","EV","EA"]
-    
-    HOURS_PER_TIMEPERIOD = {"AM":3.0, #what about 4-6a?
-                            "MD":6.5,
-                            "PM":3.0,
-                            "EV":8.5,
-                            "EA":3.0
-                            }
-    
-    MINUTES_PAST_MIDNIGHT = {"AM":360, # 6am - 9am
-                             "MD":540, # 9am - 3:30pm
-                             "PM":930, # 3:30pm - 6:30pm
-                             "EV":1110,# 6:30pm - 3am
-                             "EA":180, # 3am - 6am
-                             }
-    
-    MODETYPE_TO_MODES = {"Local":[11,12,16,17,18,19],
-                         "BRT":[13,20],
-                         "LRT":[14,15,21],
-                         "Premium":[22,23,24,25,26,27,28,29,30],
-                         "Ferry":[31],
-                         "BART":[32]
-                         }
-    
-    # Do these modes have offstreet stops?
-    MODENUM_TO_OFFSTREET = {11:False, # muni bus
-                            12:False, # muni Express bus
-                            13:False, # mun BRT
-                            14:False, # cable car -- These are special because they don't have explicity WNR nodes
-                            15:False, # LRT       -- and are just implemented by reading the muni.xfer line as muni.access
-                            16:False, # Shuttles
-                            17:False, # SamTrans bus
-                            18:False, # AC bus
-                            19:False, # other local bus
-                            20:False, # Regional BRT
-                            21:True,  # Santa Clara LRT
-                            22:False, # AC premium bus
-                            23:False, # GG premium bus
-                            24:False, # SamTrans premium bus
-                            25:False, # Other premium bus
-                            26:True,  # Caltrain
-                            27:True,  # SMART
-                            28:True,  # eBART
-                            29:True,  # Regional Rail/ACE/Amtrak
-                            30:True,  # HSR
-                            31:True,  # Ferry
-                            32:True   # BART
-                            }
-    
     def __init__(self, name=None, template=None):
         self.attr = {} # for Cube attributes that will be written to Cube *.lin files.  Not messing with it now because it's baked into the workflow.
         self.otherattr = {} # for other stuff... departure times, for instance.
@@ -79,6 +30,7 @@ class TransitLine(object):
         self.board_fare = None
         self.farelinks = []
         self.od_fares = []
+        self.vehicle_types = {}
 
         if name and name.find('"')==0:
             self.name = name[1:-1]  # Strip leading/trailing dbl-quotes
@@ -119,7 +71,7 @@ class TransitLine(object):
            - allowDowngrades (optional, pass either True or False) specifies whether headways
              may be increased (i.e., whether service may be reduced) with the current action. 
         '''
-        all_timepers = ['AM','MD','PM','EV','EA']
+        all_timepers = WranglerLookups.ALL_TIMEPERIODS
         if timepers in (None, True, 'All', 'all', 'ALL'):
             if not len(freqs)==5: raise NetworkException('Must specify all 5 frequencies or specify time periods to set')
             num_freqs = 5
@@ -153,7 +105,25 @@ class TransitLine(object):
             else:
                 self.attr[attr_set] = min(float(freqs[i]),self.attr[attr_set])
 
-        
+    def setVehicleTypes(self, vehicles):
+        '''
+        This is a function added for fast-trips.
+        vehicles is either the all-day vehicle type or a dict of time-of-day -> vehicle type
+        '''
+        # tod_vehicle_dict: tod_key -> vehicle type
+        import re
+        allday_pattern = re.compile('(ALL|all|All)[\s\-_]*(day|DAY|Day)?')
+        if isinstance(vehicles,str):
+            self.vehicle_types['allday']=vehicles
+        elif isinstance(vehicles,dict):
+            for key in vehicles.keys():
+                m = allday_pattern.match(key)
+                if m:
+                    self.vehicle_types['allday'] = vehicles[key]
+                else:
+                    self.vehicle_types[key] = vehicles[key]
+        return self.vehicle_types
+                
     def getFreqs(self):
         """
         Return the frequencies for this line as a list of 5 strings representing AM,MD,PM,EV,EA.
@@ -387,7 +357,7 @@ class TransitLine(object):
             link = TransitLink()
             link.setId(link_id)
             
-            for tp in TransitLine.ALL_TIMEPERIODS:
+            for tp in WranglerLookups.ALL_TIMEPERIODS:
                 try:
                     # is it in the streets network? then get the BUSTIME
                     hwy_link_attr = highway_networks[tp][(a_node,b_node)]
@@ -455,12 +425,12 @@ class TransitLine(object):
         CHAMP's five time periods.
         '''                                
         if self.hasService:
-            all_timeperiods = TransitLine.MINUTES_PAST_MIDNIGHT.keys()
+            all_timeperiods = WranglerLookups.MINUTES_PAST_MIDNIGHT.keys()
             for tp in all_timeperiods:
                 headway = self.getFreq(tp)
                 
                 if headway > 0:
-                    time_period_start = TransitLine.MINUTES_PAST_MIDNIGHT[tp]
+                    time_period_start = WranglerLookups.MINUTES_PAST_MIDNIGHT[tp]
                     # TO-DO: ADD IF PREV TP HAS SCHEDULED TIMES, USE THAT RATHER THAN A RANDOM NEW TIME
                     self.otherattr["DEPT_%s" % tp] = round(self.get_psuedo_random_departure_time(time_period_start, headway),0)
         else:
@@ -515,28 +485,36 @@ class TransitLine(object):
         # write the last node
         f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].y, self.n[-1].x, seq, cum_dist))
     
-    def writeFastTrips_Trips(self, f_trips, f_stoptimes, id_generator, writeHeaders=False):
+    def writeFastTrips_Trips(self, f_trips, f_trips_ft, f_stoptimes, f_stoptimes_ft, id_generator, writeHeaders=False):
         '''
         Writes fast-trips style stop_times records for this line.
         Writes a header if writeHeaders = True
         '''
         if writeHeaders:
             f_trips.write('route_id,service_id,trip_id,shape_id\n')
+            f_trips_ft.write('trip_id,vehicle_name\n')
             f_stoptimes.write('trip_id,arrival_time,departure_time,stop_id,stop_sequence\n')
 
-        for tp in TransitLine.ALL_TIMEPERIODS:
+        for tp in WranglerLookups.ALL_TIMEPERIODS:
             headway = self.getFreq(tp)
             if not headway > 0:
                 continue
             
             departure = self.otherattr['DEPT_%s' % tp]
-            tp_end = TransitLine.MINUTES_PAST_MIDNIGHT[tp] + TransitLine.HOURS_PER_TIMEPERIOD[tp] * 60
+            tp_end = WranglerLookups.MINUTES_PAST_MIDNIGHT[tp] + WranglerLookups.HOURS_PER_TIMEPERIOD[tp] * 60
             while departure < tp_end:
                 cum_time = 0
                 stop_time = departure + cum_time
+                stop_time_hhmmss = minutesPastMidnightToHHMMSS(stop_time)
                 seq = 1
                 trip_id = id_generator.next()
                 f_trips.write('%s,%d,%d,%s\n' % (self.name,1,trip_id,self.name))
+                if tp in self.vehicle_types.keys():
+                    vtype = self.vehicle_types[tp]
+                else:
+                    vtype = self.vehicle_types['allday']                    
+                f_trips_ft.write('%s,%s\n' % (self.name,vtype))
+                
                 for a, b in zip(self.n[:-1], self.n[1:]):
                     if not isinstance(a, Node) or not isinstance(b, Node):
                         ex = "Not all nodes in line %s are type Node" % self.name
@@ -545,21 +523,21 @@ class TransitLine(object):
                     else:
                         a_node, b_node = abs(int(a.num)), abs(int(b.num))
                         ab_link = self.links[(a_node,b_node)]
-                        ##stop_time_hhmmss = int(stop_time/3600)*100000 + int(stop_time) 
                         try:
                             traveltime = float(ab_link['BUSTIME_%s' % tp])
                         except:
                             WranglerLogger.debug("LINE %s, LINK %s: NO BUSTIME FOUND FOR TP %s" % (self.name, ab_link.id, tp))
                         rest_time = 0
-                        f_stoptimes.write('%d,%d,%d,%d,%d\n' % (trip_id, stop_time, stop_time, a_node, seq))
+                        f_stoptimes.write('%d,%s,%s,%d,%d\n' % (trip_id, stop_time_hhmmss, stop_time_hhmmss, a_node, seq))
                         try:
                             cum_time += traveltime
                             stop_time = departure + cum_time
+                            stop_time_hhmmss = minutesPastMidnightToHHMMSS(stop_time)
                             seq += 1
                         except:
-                            print cum_time, stop_time, departure, seq
+                            print cum_time, stop_time_hhmmss, departure, seq
                 departure += headway
-                f_stoptimes.write('%d,%d,%d,%d,%d\n' % (trip_id, stop_time, stop_time, b_node, seq))
+                f_stoptimes.write('%d,%s,%s,%d,%d\n' % (trip_id, stop_time_hhmmss, stop_time_hhmmss, b_node, seq))
                 
     def hasService(self):
         """
@@ -584,7 +562,7 @@ class TransitLine(object):
         (e.g. one of "Local", "BRT", "LRT", "Premium", "Ferry" or "BART")
         """
         modenum = int(self.attr['MODE'])
-        for modetype,modelist in TransitLine.MODETYPE_TO_MODES.iteritems():
+        for modetype,modelist in WranglerLookups.MODETYPE_TO_MODES.iteritems():
             if modenum in modelist:
                 return modetype
         return None
@@ -610,7 +588,7 @@ class TransitLine(object):
         Returns True if the line has offstreet nodes
         """
         modenum = int(self.attr['MODE'])
-        return TransitLine.MODENUM_TO_OFFSTREET[modenum]
+        return WranglerLookups.MODENUM_TO_OFFSTREET[modenum]
 
     def vehiclesPerPeriod(self, timeperiod):
         """
