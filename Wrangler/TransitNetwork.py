@@ -14,7 +14,9 @@ from .TransitLink import TransitLink
 from .TransitParser import TransitParser, transit_file_def
 from .Fare import ODFare, XFFare, FarelinksFare
 from .ZACLink import ZACLink
+from .Supplink import Supplink, FastTripsWalkSupplink, FastTripsDriveSupplink, FastTripsTransferSupplink
 from .HelperFunctions import *
+from .WranglerLookups import *
 import pandas as pd
 
 __all__ = ['TransitNetwork']
@@ -49,6 +51,7 @@ class TransitNetwork(Network):
         self.links              = []    # note self.links is transit support links, i.e. stuff in muni.link, caltrain.link, etc.
         self.pnrs               = []
         self.zacs               = []
+        self.supplinks          = {}    # tod -> supplinks
         self.accessli           = []
         self.xferli             = []
         self.farefiles          = {}    # farefile name -> [ lines in farefile ]
@@ -57,7 +60,10 @@ class TransitNetwork(Network):
         self.farelinks_fares    = []    # added for fast-trips
         self.fasttrips_fares    = []    # added for fast-trips
         self.fasttrips_nodes    = {}    # added for fast-trips dict of int nodenum -> FastTripsNode
-
+        self.fasttrips_walk_supplinks       = {}    # (Anode,Bnode,modenum) -> supplink
+        self.fasttrips_drive_supplinks      = {}
+        self.fasttrips_transfer_supplinks   = {}
+        
         for farefile in TransitNetwork.FARE_FILES:
             self.farefiles[farefile] = []
 
@@ -611,7 +617,25 @@ class TransitNetwork(Network):
         return convertedLines, convertedLinks, convertedPNR, convertedZAC, \
             convertedAccessLinki, convertedXferLinki, convertedODFares, convertedXFFares, \
             convertedFarelinksFares
-    
+
+    def parseSupplinks(self, trntxt, production="transit_file",verbosity=1):
+        """
+        Verbosity=1: 1 line per line summary
+        Verbosity=2: 1 line per node
+        """
+        if trntxt.strip() in ["; no fares known", "; no known fares", ";no fares known", ";no known fares"]:
+            WranglerLogger.debug(trntxt)
+            return []
+
+        success, children, nextcharacter = self.parser.parse(trntxt, production=production)
+        if not nextcharacter==len(trntxt):
+            errorstr  = "\n   Did not successfully read the whole file; got to nextcharacter=%d out of %d total" % (nextcharacter, len(trntxt))
+            errorstr += "\n   Did read %d lines, next unread text = [%s]" % (len(children), trntxt[nextcharacter:nextcharacter+50])
+            raise NetworkException(errorstr)
+        
+        convertedSupplinks   = self.parser.convertSupplinksData()
+        return convertedSupplinks
+        
     def parseFile(self, fullfile, insert_replace=True):
         """
         fullfile is the filename,
@@ -674,7 +698,7 @@ class TransitNetwork(Network):
             logstr += " %d ZACs" % len(zacs)
             self.zacs.extend( ["\n;######################### From: "+path+"\n"])
             self.zacs.extend(zacs)  #TODO: Need to replace existing PNRs
-
+            
         if len(accessli)>0:
             logstr += " %d accesslinks" % len(accessli)
             self.accessli.extend( ["\n;######################### From: "+path+"\n"])
@@ -727,7 +751,88 @@ class TransitNetwork(Network):
                 logstr += self.doMerge(fullfile,lines,links,pnr,zac,accessli,xferli,od_fares,xf_fares,farelinks_fares,insert_replace)
                 WranglerLogger.debug(logstr)
                 
+    def mergeSupplinks(self,path):
+        dirlist = os.listdir(path)
+        dirlist.sort()
+        WranglerLogger.debug("Path: %s" % path)
 
+        for filename in dirlist:
+            suffix = filename.rsplit('.')[-1].lower()
+            if suffix == 'dat':
+                self.parser = TransitParser(transit_file_def, verbosity=0)
+                self.parser.tfp.liType = suffix
+                logstr = "   Reading %s" % filename
+                f = open(os.path.join(path,filename))
+                tp = filename[:2].upper()
+                supplinks = self.parseSupplinks(f.read(),production='transit_file',verbosity=0)
+                if tp not in self.supplinks.keys(): self.supplinks[tp] = []
+                self.supplinks[tp].extend(supplinks)
+
+    def getFastTripsSupplinks(self, walkskims, nodeToTaz, maxTaz, hwyskims, pnrNodeToTaz):
+        '''
+        inputs: 
+            walkskims:   WalkSkim object
+            nodeToTaz:  dict of node -> taz
+            maxTaz:     highest node number that is a taz
+            hwyskims:   dict of timeperiod -> HighwaySkim object
+        '''
+        counter = 0
+        for tp in WranglerLookups.ALL_TIMEPERIODS:
+            for supplink in self.supplinks[tp]:
+                counter += 1
+                if isinstance(supplink, Supplink):
+                    ftsupp = None
+                    if supplink.isWalkAccess():
+                        if (supplink.Anode, supplink.Bnode) in self.fasttrips_walk_supplinks.keys():
+                            continue
+                        try:
+                            ftsupp = FastTripsWalkSupplink(walkskims=walkskims,nodeToTaz=nodeToTaz,
+                                                           maxTaz=maxTaz, template=supplink)
+                        except NetworkException as e:
+                            WranglerLogger.debug(str(e))
+                            WranglerLogger.debug("Skipping walk access supplink (%d,%d)" % (supplink.Anode,supplink.Bnode))
+                            continue
+                        self.fasttrips_walk_supplinks[(ftsupp.Anode,ftsupp.Bnode)] = ftsupp
+                    elif supplink.isWalkEgress():
+                        pass
+                    elif supplink.isWalkFunnel():
+                        for k, s in self.fasttrips_walk_supplinks.iteritems():
+                            if k[1] == supplink.Anode:
+                                ftsupp = copy.deepcopy(s)
+                                ftsupp.Bnode = supplink.Bnode
+                                ftsupp.stop_id = supplink.Bnode
+                                break
+                        if ftsupp:
+                            if (ftsupp.Anode,ftsupp.Bnode) in self.fasttrips_walk_supplinks.keys():
+                                WranglerLogger.warn("(%d-(%d)-%d) already exists in walk_access_supplinks" % (ftsupp.Anode,supplink.Anode,ftsupp.Bnode))
+                                continue
+                            self.fasttrips_walk_supplinks[(ftsupp.Anode,ftsupp.Bnode)] = ftsupp
+                        else:
+                            continue
+                    elif supplink.isDriveFunnel() or supplink.isTransitTransfer():
+                        if (supplink.Anode, supplink.Bnode) in self.fasttrips_transfer_supplinks.keys():
+                            continue
+                        try:
+                            ftsupp = FastTripsTransferSupplink(walkskims=walkskims,nodeToTaz=nodeToTaz,
+                                                               maxTaz=maxTaz, template=supplink)
+                        except NetworkException as e:
+                            WranglerLogger.debug(str(e))
+                            WranglerLogger.debug("Skipping walk access supplink (%d,%d)" % (supplink.Anode,supplink.Bnode))
+                            continue
+                        self.fasttrips_transfer_supplinks[(ftsupp.Anode,ftsupp.Bnode)] = ftsupp
+                        
+                    elif supplink.isDriveAccess() or supplink.isDriveEgress():
+                        if (supplink.Anode,supplink.Bnode,tp) in self.fasttrips_drive_supplinks.keys():
+                            continue
+                        ftsupp = FastTripsDriveSupplink(hwyskims=hwyskims, pnrNodeToTaz=pnrNodeToTaz, tp=tp, template=supplink)
+                        self.fasttrips_drive_supplinks[(ftsupp.Anode,ftsupp.Bnode,tp)] = ftsupp
+                    else:
+                        WranglerLogger.debug('unknown supplink type %s' % str(supplink))
+                if counter % 10000 == 0:
+                    WranglerLogger.debug("processed %d records" % counter)
+                    ##except Exception as e:
+                        ##WranglerLogger.warn('got error writing access file for SUPPLINK: %s' % str(supplink))
+        
     @staticmethod
     def initializeTransitCapacity(directory="."):
         TransitNetwork.capacity = TransitCapacity(directory=directory)
@@ -838,7 +943,160 @@ class TransitNetwork(Network):
     
 ##    def writeFastTrips_Network(self, dir, shapes=shapes.txt, stop_times, ):
 ##        pass
-    
+    def writeFastTrips_Agency(self, f='agency.txt', path='.', writeHeaders=True):
+        agencies = []
+        for line in self.lines:
+            if isinstance(line,str): continue
+            if not isinstance(line,FastTripsTransitLine): continue
+            df_row = line.agency_id
+            if df_row not in agencies: agencies.append(df_row)
+        df_agency = pd.DataFrame(columns=['agency_id'],data=agencies)
+        df_agency['agency_name'] = df_agency['agency_id']
+        df_agency.to_csv(os.path.join(path,f),index=False,headers=writeHeaders)
+
+    def writeFastTrips_Vehicles(self, f='vehicles.txt', path='.', writeHeaders=True):
+        vehicles = []
+        df_vehicles = None
+        for line in self.lines:
+            if isinstance(line,str): continue
+            if not isinstance(line,TransitLine): continue
+            for vtype in line.vehicle_types.itervalues():
+                if vtype not in vehicles:
+                    values = [vtype,20,int(self.capacity.vehicleTypeToCapacity[vtype])-20]
+                    df_row = pd.DataFrame(columns=['vehicle_name','seated_capacity','standing_capacity'],
+                                          data=[values])
+                    if not isinstance(df_vehicles,pd.DataFrame):
+                        df_vehicles = df_row
+                    else:
+                        df_vehicles = df_vehicles.append(df_row)
+                    vehicles.append(vtype)
+
+        df_vehicles.to_csv(os.path.join(path,f),index=False,headers=writeHeaders)
+
+    def writeFastTrips_Access(self, f_walk='walk_access.txt', f_drive='drive_acces.txt', f_transfer='transfer.txt', path='.', writeHeaders=True):
+        df_walk = None
+        df_drive = None
+        df_transfer = None
+        walk_data = []
+        drive_data = []
+        transfer_data = []
+
+        for supplink in self.fasttrips_walk_supplinks.values():
+            try:
+                slist = supplink.asList('taz','stop_id','dist','elevation_gain','population_density','employment_density','auto_capacity','indirectness')
+                #WranglerLogger.debug('walk access: %s' % str(slist))
+                walk_data.append(slist)
+            except Exception as e:
+                WranglerLogger.warn(str(e))
+
+        for supplink in self.fasttrips_drive_supplinks.values():
+            try:
+                slist = supplink.asList('taz','lot_id','direction','dist','cost','travel_time','start_time','end_time')
+                ##WranglerLogger.debug('drive access: %s' % str(slist))
+                drive_data.append(slist)
+            except Exception as e:
+                WranglerLogger.warn(str(e))
+
+        for supplink in self.fasttrips_transfer_supplinks.values():
+            try:
+                transfer_data.append(supplink.asList('from_stop_id','to_stop_id','transfer_type','min_transfer_time','dist',
+                                                     'from_route_id','to_route_id','schedule_precedence'))
+            except Exception as e:
+                WranglerLogger.warn(str(e))
+
+        if len(walk_data) > 0:
+            df_walk = pd.DataFrame(columns=['taz','stop_id','dist','elevation_gain','population_density','employment_density','auto_capacity','indirectness'],
+                                   data = walk_data)
+            df_walk = df_walk.drop_duplicates()
+        else:
+            df_walk = pd.DataFrame(columns=['taz','stop_id','dist','elevation_gain','population_density','employment_density','auto_capacity','indirectness'])
+
+        if len(drive_data) > 0:
+            df_drive = pd.DataFrame(columns=['taz','lot_id','direction','dist','cost','travel_time','start_time','end_time'],
+                                    data = drive_data)
+            df_drive = df_drive.drop_duplicates()
+        else:
+            df_drive = pd.DataFrame(columns=['taz','lot_id','direction','dist','cost','travel_time','start_time','end_time'])
+
+        if len(transfer_data) > 0:
+            df_transfer = pd.DataFrame(columns=['from_stop_id','to_stop_id','transfer_type','min_transfer_time','dist',
+                                                'from_route_id','to_route_id','schedule_precedence'], data=transfer_data)
+            df_transfer = df_transfer.drop_duplicates()
+        else:
+            df_transfer = pd.DataFrame(columns=['from_stop_id','to_stop_id','transfer_type','min_transfer_time','dist',
+                                                'from_route_id','to_route_id','schedule_precedence'])
+        
+        df_walk.to_csv(os.path.join(path,f_walk),index=False,headers=writeHeaders)
+        df_drive.to_csv(os.path.join(path,f_drive),index=False,headers=writeHeaders)
+        df_transfer.to_csv(os.path.join(path,f_transfer),index=False,headers=writeHeaders)
+##    def writeFastTrips_Access(self, f_walk='walk_access.txt', f_drive='drive_acces.txt', f_transfer='transfer.txt', path='.', writeHeaders=True):
+##        '''
+##        This is a function added for fast-trips.txt
+##
+##        walk_access:
+##            walk access links become: taz, stop_id, dist, (optional: elevation_gain, population_density, retail_density, auto_capacity, indirectness)
+##            drive funnel links become: lot_id, stop_id, dist, ...
+##        drive_access:
+##            drive access links become: taz, lot_id, direction, dist, cost, travel_time, start_time, end_time
+##        '''
+##        df_walk     = None
+##        df_drive    = None
+##        df_transfer = None
+##        walk_data = []
+##        drive_data = []
+##        transfer_data = []
+##        
+##        default_dist = 25.0/5280.0
+##        WranglerLogger.warn('NEED TIME OF DAY SENSITIVITY FOR ACCESS LINKS')
+##        WranglerLogger.warn('NEED TO ADD LINE-TO-LINE INFO TO TRANSFERS')
+##        for tp in WranglerLookups.ALL_TIMEPERIODS:
+##            start_time = WranglerLookups.TIMEPERIOD_TO_TIMERANGE[tp][0]
+##            end_time = WranglerLookups.TIMEPERIOD_TO_TIMERANGE[tp][1]
+##            for supplink in self.supplinks[tp]:
+##                if isinstance(supplink, Supplink):
+##                    try:
+##                        if supplink.isWalkAccess():
+##                            walk_data.append([supplink.Anode,supplink.Bnode,float(supplink['DIST'])/5280.0])
+##                        elif supplink.isWalkEgress():
+##                            pass
+##                        elif supplink.isDriveFunnel():
+##                            if 'TIME' in supplink.keys():
+##                                transfer_data.append([supplink.Anode,supplink.Bnode,2,supplink['TIME'],default_dist,None,None,'from'])
+##                            else:
+##                                transfer_data.append([supplink.Anode,supplink.Bnode,2,15,default_dist,None,None,'from'])
+##                        elif supplink.isDriveAccess():
+##                            drive_data.append([supplink.Anode,supplink.Bnode,'access',float(supplink['DIST'])/5280.0,0,supplink['TIME'],start_time,end_time])
+##                        elif supplink.isDriveEgress():
+##                            drive_data.append([supplink.Anode,supplink.Bnode,'egress',float(supplink['DIST'])/5280.0,0,supplink['TIME'],start_time,end_time])
+##                        elif supplink.isTransitTransfer():
+##                            transfer_data.append([supplink.Anode,supplink.Bnode,0,0,float(supplink['DIST'])/5280.0,None,None,'from'])
+##                    except Exception as e:
+##                        WranglerLogger.warn('got error writing access file for SUPPLINK: %s' % str(supplink))
+##
+##        try:       
+##            df_walk = pd.DataFrame(columns=['taz','stop_id','dist'], data=walk_data)
+##        except Exception as e:
+##            WranglerLogger.warn(str(e))
+##        df_walk = df_walk.drop_duplicates()
+##
+##        try:
+##            df_drive = pd.DataFrame(columns=['taz','lot_id','direction','dist','cost','travel_time',
+##                                             'start_time','end_time'], data=drive_data)
+##        except Exception as e:
+##            WranglerLogger.warn(str(e))
+##        df_drive = df_drive.drop_duplicates()
+##
+##        try:
+##            df_transfer = pd.DataFrame(columns=['from_stop_id','to_stop_id','transfer_type','min_transfer_time',
+##                                                'dist','from_route_id','to_route_id','schedule_precedence'], data=transfer_data)
+##        except Exception as e:
+##            WranglerLogger.warn(str(e))
+##            
+##        df_transfer = df_transfer.drop_duplicates()
+##        df_walk.to_csv(os.path.join(path,f_walk),index=False,headers=writeHeaders)
+##        df_drive.to_csv(os.path.join(path,f_drive),index=False,headers=writeHeaders)
+##        df_transfer.to_csv(os.path.join(path,f_transfer),index=False,headers=writeHeaders)
+            
     def writeFastTrips_Shapes(self, f='shapes.txt', path='.', writeHeaders=True):
         '''
         this is a funtion added for fast-trips.
@@ -858,7 +1116,8 @@ class TransitNetwork(Network):
                 WranglerLogger.debug("skipping line because unknown type")
         print "wrote %d lines" % count
 
-    def writeFastTrips_Trips(self, f_trips='trips.txt', f_stoptimes='stop_times.txt', path='.', writeHeaders=True):
+    def writeFastTrips_Trips(self, f_trips='trips.txt', f_trips_ft='trips_ft.txt',
+                             f_stoptimes='stop_times.txt', f_stoptimes_ft='stop_times_ft.txt', path='.', writeHeaders=True):
         '''
         This is a function added for fast-trips.
         Iterate each line in this TransitNetwork and write fast-trips style stop_times.txt fo f
@@ -866,7 +1125,9 @@ class TransitNetwork(Network):
         <TOD> in ``AM``, ``MD``, ``PM``, ``EV``, ``EA``.
         '''
         f_trips     = openFileOrString(os.path.join(path,f_trips))
+        f_trips_ft  = openFileOrString(os.path.join(path,f_trips_ft))
         f_stoptimes = openFileOrString(os.path.join(path,f_stoptimes))
+        f_stoptimes_ft = openFileOrString(os.path.join(path,f_stoptimes_ft))
         id_generator = generate_unique_id(range(1,999999))
         
         # go through lines and write them to f.
@@ -874,7 +1135,7 @@ class TransitNetwork(Network):
             if isinstance(line, str):
                 pass
             elif isinstance(line, TransitLine):
-                line.writeFastTrips_Trips(f_trips, f_stoptimes, id_generator, writeHeaders)
+                line.writeFastTrips_Trips(f_trips, f_trips_ft, f_stoptimes, f_stoptimes_ft, id_generator, writeHeaders)
                 writeHeaders = False # only write them the with the first line.
 
     def writeFastTrips_Routes(self, f_routes='routes.txt', f_routes_ft='routes_ft.txt', path='.', writeHeaders=True):

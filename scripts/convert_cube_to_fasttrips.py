@@ -1,7 +1,9 @@
 import copy,datetime,getopt,logging,os,shutil,sys,time
+from dbfpy import dbf
 
 # use Wrangler from the same directory as this build script
 sys.path.insert(0, os.path.join(os.path.dirname(__file__),".."))
+sys.path.append(r"Y:\champ\releases\5.0.0\lib")
 import Wrangler
 from Wrangler.Logger import WranglerLogger
 from Wrangler.TransitNetwork import TransitNetwork
@@ -10,11 +12,12 @@ from Wrangler.TransitLine import TransitLine
 from Wrangler.HelperFunctions import *
 #from Wrangler.FareParser import FareParser, fare_file_def  # should probably be moved into TransitNetwork.
 from Wrangler.Fare import ODFare, XFFare, FarelinksFare
-
+from Wrangler.Regexes import *
 from Wrangler.NetworkException import NetworkException
 from _static.Cube import CubeNet
-sys.path.insert(0,r"Y:\champ\releases\5.0.0\lib")
+
 import Lookups
+from SkimUtil import Skim, HighwaySkim, WalkSkim
 
 USAGE = """
 
@@ -36,9 +39,11 @@ HWY_LOADED  = r'Q:\Model Development\SHRP2-fasttrips\Task2\network_translation\i
 TRN_LOADED  = r'Q:\Model Development\SHRP2-fasttrips\Task2\network_translation\input_champ_network\trn'
 # .link (off-street link) and fares:
 TRN_BASE    = r'Q:\Model Development\SHRP2-fasttrips\Task2\network_translation\input_champ_network\freeflow\trn'
+TRANSIT_CAPACITY_DIR = r'Y:\networks\TransitVehicles'
 FT_OUTPATH  = r'Q:\Model Development\SHRP2-fasttrips\Task2\network_translation\testing\fast-trips'
-#FT_OUTPATH = os.path.curdir
 CHAMP_NODE_NAMES = r'Y:\champ\util\nodes.xls'
+MODEL_RUN_DIR = r'X:\Projects\TIMMA\2012_Base_v2'       # for hwy and walk skims
+SMALL_SUPPLINKS = r'Q:\Model Development\SHRP2-fasttrips\Task2\network_translation\input_champ_network\small_supplinks'
 
 if __name__=='__main__':
     test=False
@@ -73,7 +78,56 @@ if __name__=='__main__':
     WranglerLogger.debug("Creating transit network.")
     transit_network = TransitNetwork(5.0)
     transit_network.mergeDir(TRN_BASE)
+    WranglerLogger.debug("Merging supplinks.")
+    transit_network.mergeSupplinks(TRN_LOADED)
+    ##transit_network.mergeSupplinks(SMALL_SUPPLINKS)
+    WranglerLogger.debug("\tsetting up walk skims for access links.")
+    walkskim = WalkSkim(file_dir = MODEL_RUN_DIR)
+    nodeToTazFile = os.path.join(MODEL_RUN_DIR,"nodesToTaz.dbf")
+    nodesdbf      = dbf.Dbf(nodeToTazFile, readOnly=True, new=False)
+    nodeToTaz     = {}
+    maxTAZ        = 0
+    for rec in nodesdbf:
+        nodeToTaz[rec["N"]] = rec["TAZ"]
+        maxTAZ = max(maxTAZ, rec["TAZ"])
+    nodesdbf.close()
+
+    WranglerLogger.debug("\tsetting up highway skims for access links.")
+    hwyskims = {}
+    for tpnum,tpstr in Skim.TIMEPERIOD_NUM_TO_STR.items():
+        hwyskims[tpnum] = HighwaySkim(file_dir=MODEL_RUN_DIR, timeperiod=tpstr) 
+    pnrTAZtoNode = {}
+    pnrZonesFile = os.path.join(MODEL_RUN_DIR,"PNR_ZONES.dbf")
+    if not os.path.exists(pnrZonesFile):
+        WranglerLogger.fatal("Couldn't open %s" % pnrZonesFile)
+        sys.exit(2)
+    indbf = dbf.Dbf(os.path.join(MODEL_RUN_DIR,"PNR_ZONES.dbf"), readOnly=True, new=False)
+    for rec in indbf:
+        pnrTAZtoNode[rec["PNRTAZ"]] = rec["PNRNODE"]
+    indbf.close()
+    pnrNodeToTAZ = dict((v,k) for k,v in pnrTAZtoNode.iteritems())
+    # print self.pnrTAZtoNode
+    
+    maxRealTAZ = min(pnrTAZtoNode.keys())-1
+    WranglerLogger.debug("\tconverting supplinks to fasttrips format.")
+    transit_network.getFastTripsSupplinks(walkskim,nodeToTaz,maxTAZ,hwyskims,pnrNodeToTAZ)
     transit_network.convertTransitLinesToFastTripsTransitLines()
+    WranglerLogger.debug("Getting transit capacity.")
+    Wrangler.TransitNetwork.capacity = Wrangler.TransitCapacity(directory=TRANSIT_CAPACITY_DIR)
+    WranglerLogger.debug("Writing supplinks")
+    transit_network.writeFastTrips_Access(path=FT_OUTPATH)
+    # build dict of vehicle types
+    for line in transit_network.lines:
+        ##transit_freqs_by_line[line.name] = line.getFreqs()
+        if isinstance(line, str):
+            continue
+        vehicles = {'AM': Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "AM")[1],
+                    'MD': Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "MD")[1],
+                    'PM': Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "PM")[1],
+                    'EV': Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "EV")[1],
+                    'EA': Wrangler.TransitNetwork.capacity.getSystemAndVehicleType(line.name, "EA")[1]}
+        line.setVehicleTypes(vehicles)
+        
     WranglerLogger.debug("Making FarelinksFares unique")
     transit_network.makeFarelinksUnique()
     WranglerLogger.debug("Adding station names to OD Fares")
@@ -90,6 +144,10 @@ if __name__=='__main__':
     WranglerLogger.debug("adding fares to lines")
     transit_network.addFaresToLines()
     transit_network.createFastTripsFares()
+    WranglerLogger.debug("writing agencies")
+    transit_network.writeFastTrips_Agency(path=FT_OUTPATH)
+    WranglerLogger.debug("writing vehicles")
+    transit_network.writeFastTrips_Vehicles(path=FT_OUTPATH)
     WranglerLogger.debug("writing lines")
     transit_network.writeFastTrips_Shapes(path=FT_OUTPATH)
     WranglerLogger.debug("writing routes")
@@ -101,6 +159,7 @@ if __name__=='__main__':
     WranglerLogger.debug("writing stops")
     transit_network.createFastTripsNodes()
     transit_network.writeFastTrips_Stops(path=FT_OUTPATH)
+    
     #transit_network.writeFastTrips_RoutesStopsFares('stops.txt','routes.txt','routes_ft.txt','fare_rules.txt','fare_rules_ft.txt','fare_attributes.txt','fare_attributes_ft.txt','fare_transfer_rules.txt')
 
     if test:

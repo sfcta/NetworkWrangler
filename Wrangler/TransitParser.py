@@ -16,7 +16,7 @@ from .Fare import Fare, XFFare, ODFare, FarelinksFare
 
 __all__ = [ 'TransitParser' ]
 
-WRANGLER_FILE_SUFFICES = [ "lin", "link", "pnr", "zac", "access", "xfer", "fare" ]
+WRANGLER_FILE_SUFFICES = [ "lin", "link", "pnr", "zac", "access", "xfer", "fare" ,"dat"]
 
 # PARSER DEFINITION ------------------------------------------------------------------------------
 # NOTE: even though XYSPEED and TIMEFAC are node attributes here, I'm not sure that's really ok --
