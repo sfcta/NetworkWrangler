@@ -74,6 +74,26 @@ def removeDuplicatesFromList(l):
             this_list.remove(x)
     return this_list
 
+def minutesPastMidnightToHHMMSS(minutes):
+    if isinstance(minutes, float):
+        seconds = minutes - int(minutes)
+        seconds *= 60
+        ss = '%02d' % int(round(seconds,0))
+    else:
+        ss = '00'
+        
+    minutes = int(minutes)
+    hh = '%02d' % (minutes/60)
+    mm = '%02d' % (minutes%60)
+    return hh+mm+ss
+
+def secondsPastMidnightToHHMMSS(seconds):
+    seconds = int(seconds)
+    hh = '%02d' % (seconds/3600)
+    mm = '%02d' % ((seconds%3600)/60)
+    ss = '%02d' % ((seconds%3600)%60)
+    return hh+mm+ss
+
 def getChampNodeNameDictFromFile(filename):
     book = xlrd.open_workbook(filename)
     sh = book.sheet_by_index(0)
