@@ -225,16 +225,19 @@ class FastTripsNode(Node):
         elif isinstance(coords, dict):
             (self.x, self.y) = coords[n]
         self.stop_lon, self.stop_lat = reproject_to_wgs84(self.x,self.y,EPSG='+init=EPSG:2227')
-        
-    def asDataFrame(self, *args):
-        import pandas as pd
-        if args is None:
-            args = ['stop_id','stop_name','stop_lat','stop_lon','zone_id']
-        data = []        
-        for arg in args:
-            data.append(getattr(self,arg))
 
-        df = pd.DataFrame(columns=args,data=[data])
+    def asList(self, columns=None):
+        if columns is None:
+            columns = ['stop_id','stop_name','stop_lat','stop_lon','zone_id']
+        data = []
+        for arg in columns:
+            data.append(getattr(self,arg))
+        return data
+            
+    def asDataFrame(self, columns=None):
+        import pandas as pd
+        data = self.asList(columns)        
+        df = pd.DataFrame(columns=columns,data=[data])
         return df
         
             ##if arg not in self.keys()self[arg]

@@ -229,7 +229,8 @@ class TransitLine(object):
                     if n.isStop(): stops.append(int(n.num))
                 else:
                     raise NetworkException("UNKNOWN DATA TYPE FOR NODE (%s): %s" % (type(n), str(n)))
-
+        return stops
+    
     def getNodeSequenceAsInt(self, ignoreStops=True):
         '''
         This is a function added for fast-trips.
@@ -993,6 +994,10 @@ class FastTripsTransitLine(TransitLine):
         if fare_class:
             self.fare_class = fare_class
             return self.fare_class
+        if self.fasttrips_fares:
+            if len(self.fasttrips_fares) == 1:
+                self.fare_class = self.fasttrips_fares[0].fare_class
+                return self.fare_class
         ft_fares = self.getFastTripsFares_asList()
         if len(ft_fares) == 1:
             self.fare_class = ft_fares[0].fare_class
@@ -1033,15 +1038,22 @@ class FastTripsTransitLine(TransitLine):
         # write the last node
         f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].stop_lat, self.n[-1].stop_lon, seq, cum_dist))
 
-    def asDataFrame(self, *args):
+    def addFares(self, od_fares=None, xf_fares=None, farelinks_fares=None):
+        TransitLine.addFares(self, od_fares,xf_fares,farelinks_fares)
+        self.fasttrips_fares = self.getFastTripsFares_asList()
+        
+    def asList(self, columns=None):
+        data = []
+        if columns is None:
+            columns = ['stop_id','stop_name','stop_lat','stop_lon','zone_id']
+        for col in columns:
+            data.append(getattr(self,col))
+        return data
+            
+    def asDataFrame(self, columns=None):
         import pandas as pd
-        if args is None:
-            args = ['stop_id','stop_name','stop_lat','stop_lon','zone_id']
-        data = []        
-        for arg in args:
-            data.append(getattr(self,arg))
-
-        df = pd.DataFrame(columns=args,data=[data])
+        data = self.asList(columns=columns)
+        df = pd.DataFrame(columns=columns,data=[data])
         return df
     
     def _applyTemplate(self, template):

@@ -135,21 +135,18 @@ class Supplink(dict):
         elif self.isDriveAccess(): self.setMode(Supplink.MODES_INV["DRIVE_EGRESS"])
         elif self.isDriveEgress(): self.setMode(Supplink.MODES_INV["DRIVE_ACCESS"])
 
-    def asList(self, *args):
-        result = []
-        for arg in args:
-            result.append(getattr(self,arg))
+    def asList(self, columns=None):
+        data = []
+        if not isinstance(columns, list): raise NetworkException("Supplink.asList() requires columns argument as a list")
+        for col in columns:
+            data.append(getattr(self,col))
         return result
         
-    def asDataFrame(self, *args):
+    def asDataFrame(self, columns=None):
         import pandas as pd
-        if args is None:
-            args = ['stop_id','stop_name','stop_lat','stop_lon','zone_id']
-        data = []        
-        for arg in args:
-            data.append(getattr(self,arg))
-
-        df = pd.DataFrame(columns=args,data=[data])
+        if columns is None: columns = ['Anode','Bnode','mode']
+        data = self.asList(columns)
+        df = pd.DataFrame(columns=columns,data=[data])
         return df
     
         
@@ -171,18 +168,18 @@ class FastTripsWalkSupplink(Supplink):
             self.auto_capacity = None
             self.indirectness = None
 
-    def asDataFrame(self, *args):
-        if args is None:
-            args = ['taz','stop_id','dist','elevation_gain','population_density',
-                    'employment_density','retail_density','auto_capacity','indirectness']
-        result = Supplink.asDataFrame(self, *args)
+    def asDataFrame(self, columns=None):
+        if columns is None:
+            columns = ['taz','stop_id','dist','elevation_gain','population_density',
+                       'employment_density','retail_density','auto_capacity','indirectness']
+        result = Supplink.asDataFrame(self, columns)
         return result
 
-    def asList(self, *args):
-        if args is None:
-            args = ['taz','stop_id','dist','elevation_gain','population_density',
-                    'employment_density','retail_density','auto_capacity','indirectness']
-        result = Supplink.asList(self, *args)
+    def asList(self, columns=None):
+        if columns is None:
+            columns = ['taz','stop_id','dist','elevation_gain','population_density',
+                       'employment_density','retail_density','auto_capacity','indirectness']
+        result = Supplink.asList(self, columns)
         return result
     
     def setAttributes(self, walkskims, nodeToTaz, maxTaz):
@@ -292,11 +289,9 @@ class FastTripsDriveSupplink(Supplink):
         self.travel_time = time
         self.setStartTimeEndTimeFromTimePeriod(tpstr)
 
-
-
-
 class FastTripsTransferSupplink(FastTripsWalkSupplink):
-    def __init__(self,walkskims=None, nodeToTaz=None, maxTaz=None, template=None):
+    def __init__(self,walkskims=None, nodeToTaz=None, maxTaz=None, transfer_type=None, min_transfer_time=None,
+                 from_route_id=None, to_route_id=None, schedule_precedence=None, template=None):
         FastTripsWalkSupplink.__init__(self, walkskims, nodeToTaz, maxTaz, template)
         # transfer req'd
         self.from_stop_id = self.Anode
@@ -307,5 +302,3 @@ class FastTripsTransferSupplink(FastTripsWalkSupplink):
         self.from_route_id = None
         self.to_route_id = None
         self.schedule_precedence = None # 'from' or 'to'
-
-        
