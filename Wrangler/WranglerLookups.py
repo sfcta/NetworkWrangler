@@ -89,6 +89,30 @@ class WranglerLookups:
                         32:{'desc':"BART", 'type':"BART"},
                         }
 
+    MODE_HEIRARCHY = [30, #:{'desc':"HSR", 'type':"Premium"},
+                      29, #:{'desc':"Regional Rail/ACE/AMTRAK", 'type':"Premium"},
+                      31, #:{'desc':"Ferry", 'type':"Ferry"},
+                      26, #:{'desc':"Caltrain", 'type':"Premium"},
+                      32, #:{'desc':"BART", 'type':"BART"},
+                      27, #:{'desc':"SMART", 'type':"Premium"},
+                      28, #:{'desc':"eBART", 'type':"Premium"},
+                      24, #:{'desc':"Sam Trans Express Bus", 'type':"Premium"},
+                      25, #:{'desc':"Other Premium Bus", 'type':"Premium"},
+                      22, #:{'desc':"AC Transbay Buses", 'type':"Premium"},
+                      23, #:{'desc':"Golden Gate Bus", 'type':"Premium"},
+                      15, #:{'desc':"LRT Muni", 'type':"LRT"},
+                      21, #:{'desc':"VTA LRT", 'type':"LRT"},
+                      20, #:{'desc':"Regional BRT", 'type':"BRT"},
+                      13, #:{'desc':"BRT Muni", 'type':"local bus"},
+                      12, #:{'desc':"Express Muni", 'type':"local bus"},
+                      11, #:{'desc':"Local Muni", 'type':"local bus"},
+                      18, #:{'desc':"AC Local", 'type':"local bus"},
+                      14, #:{'desc':"Muni Cable Car", 'type':"LRT"},
+                      16, #:{'desc':"Free and Open Shuttles", 'type':"local bus"},
+                      17, #:{'desc':"SamTrans Local", 'type':"local bus"},
+                      19, #:{'desc':"Other Local MTC Buses", 'type':"local bus"},
+                      ]
+                      
     ACCESS_MODES        = [1,3,6,7]
     EGRESS_MODES        = [2,4]
     TRANSFER_MODES      = [5]
