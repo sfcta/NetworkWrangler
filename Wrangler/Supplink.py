@@ -140,7 +140,7 @@ class Supplink(dict):
         if not isinstance(columns, list): raise NetworkException("Supplink.asList() requires columns argument as a list")
         for col in columns:
             data.append(getattr(self,col))
-        return result
+        return data
         
     def asDataFrame(self, columns=None):
         import pandas as pd

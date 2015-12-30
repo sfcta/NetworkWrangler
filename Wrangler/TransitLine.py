@@ -105,7 +105,7 @@ class TransitLine(object):
             else:
                 self.attr[attr_set] = min(float(freqs[i]),self.attr[attr_set])
 
-    def setVehicleTypes(self, vehicles):
+    def setVehicleTypes(self, vehicles=None):
         '''
         This is a function added for fast-trips.
         vehicles is either the all-day vehicle type or a dict of time-of-day -> vehicle type
@@ -113,6 +113,8 @@ class TransitLine(object):
         # tod_vehicle_dict: tod_key -> vehicle type
         import re
         allday_pattern = re.compile('(ALL|all|All)[\s\-_]*(day|DAY|Day)?')
+
+        if vehicles == None: vehicles = "unidentified"        
         if isinstance(vehicles,str):
             self.vehicle_types['allday']=vehicles
         elif isinstance(vehicles,dict):
@@ -264,7 +266,7 @@ class TransitLine(object):
                 od_fare_dict[(a,b)] = fare
         return od_fare_dict
     
-    def getFastTripsFares_asList(self):
+    def getFastTripsFares_asList(self, zone_suffixes=False):
         '''
         This is a function added for fast-trips.
         '''
@@ -274,25 +276,15 @@ class TransitLine(object):
         origin_id, destination_id = None, None
         price = self.board_fare.price
         nodes = self.getNodeSequenceAsInt(ignoreStops=False)
+        od_fare_dict = None
 
-        idx = 0
-        if self.hasODFares() and self.hasFarelinks():
-            WranglerLogger.warn("LINE %s HAS BOTH OD FARES AND FARELINKS FARES." % self.name)
-        
         if self.hasODFares():
-            for fare in self.od_fares:
-                if isinstance(fare, ODFare):
-                    modenum = int(self.attr['MODE'])
-                    rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum,price=self.board_fare.price + fare.price,origin_id=fare.fr_name,destination_id=fare.to_name)
-                    ##WranglerLogger.debug('%s' % str(rule))
-                    if rule not in rules:
-                        rules.append(rule)
-                    
-        elif self.hasFarelinks():
+            od_fare_dict = self.getODFaresDict()
+            
+        if self.hasFarelinks():
             last_rule = None
             stop_a = None
             stop_b = None
-            
             for a, idx in zip(nodes[:-1],range(len(nodes[:-1]))):
                 # iterate over all origins
                 if a > 0:
@@ -314,23 +306,38 @@ class TransitLine(object):
                                 cost_increment += fare.price
                                 price = self.board_fare.price + cost_increment
                                 # WranglerLogger.debug("COST INCREMENT ON LINE %s to $%.2f between %s and %s" % (self.name, float(price)/100, str(origin_id), str(destination_id)))
+                                
+                    if od_fare_dict:
+                        od_fare = od_fare_dict[(a,b)]
+                        price += od_fare.price
+                        
                     if b > 0:
                         stop_b          = b
                         destination_id  = Node.node_to_zone[stop_b]
                         modenum = int(self.attr['MODE'])
-                        rule = FastTripsFare(champ_line_name = self.name,champ_mode=modenum, price=price,origin_id=origin_id,destination_id=destination_id)
+                        rule = FastTripsFare(champ_line_name = self.name,champ_mode=modenum, price=price,origin_id=origin_id,destination_id=destination_id,zone_suffixes=zone_suffixes)
                     else:
                         continue
                     if rule == last_rule: continue
                     if rule not in rules:
                         rules.append(rule)
                     last_rule = copy.deepcopy(rule)
+                    
+        elif self.hasODFares():
+            for fare in self.od_fares:
+                if isinstance(fare, ODFare):
+                    modenum = int(self.attr['MODE'])
+                    rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum,price=self.board_fare.price + fare.price,origin_id=fare.fr_name,destination_id=fare.to_name,zone_suffixes=zone_suffixes)
+                    ##WranglerLogger.debug('%s' % str(rule))
+                    if rule not in rules:
+                        rules.append(rule)
+                        
         else:
             # origin_id and destination_id only matter for lines that cross farelinks.
             origin_id       = None
             destination_id  = None
             modenum = int(self.attr['MODE'])
-            rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum, price=self.board_fare.price,origin_id=origin_id,destination_id=destination_id)
+            rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum, price=self.board_fare.price,origin_id=origin_id,destination_id=destination_id,zone_suffixes=zone_suffixes)
             rules.append(rule)
                 
         return rules
@@ -457,7 +464,7 @@ class TransitLine(object):
             mean = (max_start_time + min_start_time)/2
             # Using 3 because 3 Standard deviatons should account for 99.7% of a population in a normal distribution. 
             sd = mean/3
-            start_time = random.normalvariate(mean, sd)
+            start_time = random.lognormvariate(mean, sd)
         start_time = start_time + time_period_start 
         return start_time
 
@@ -495,6 +502,7 @@ class TransitLine(object):
             f_trips.write('route_id,service_id,trip_id,shape_id\n')
             f_trips_ft.write('trip_id,vehicle_name\n')
             f_stoptimes.write('trip_id,arrival_time,departure_time,stop_id,stop_sequence\n')
+            f_stoptimes_ft.write('trip_id,stop_id,pay_at_station,real_time_data,front_board_only,reliability,level_boarding\n')
 
         for tp in WranglerLookups.ALL_TIMEPERIODS:
             headway = self.getFreq(tp)
@@ -539,6 +547,7 @@ class TransitLine(object):
                             print cum_time, stop_time_hhmmss, departure, seq
                 departure += headway
                 f_stoptimes.write('%d,%s,%s,%d,%d\n' % (trip_id, stop_time_hhmmss, stop_time_hhmmss, b_node, seq))
+                f_stoptimes_ft.write('%d,%d,,,,,\n' % (trip_id, b_node))
                 
     def hasService(self):
         """
@@ -1041,6 +1050,11 @@ class FastTripsTransitLine(TransitLine):
     def addFares(self, od_fares=None, xf_fares=None, farelinks_fares=None):
         TransitLine.addFares(self, od_fares,xf_fares,farelinks_fares)
         self.fasttrips_fares = self.getFastTripsFares_asList()
+
+    def addFastTripsFares(self, fasttrips_fares):
+        self.fasttrips_fares = []
+        for fare in fasttrips_fares:
+            pass
         
     def asList(self, columns=None):
         data = []
