@@ -354,17 +354,25 @@ class FastTripsFare(Fare):
     def __init__(self,fare_id=None,operator=None,line=None,origin_id=None,destination_id=None,
                  contains_id=None,price=None,fare_class=None,start_time=None,end_time=None,
                  transfers=None,transfer_duration=None,
-                 champ_line_name=None, champ_mode=None):
+                 champ_line_name=None, champ_mode=None,
+                 zone_suffixes=False):
         
         self.route_id       = champ_line_name
         self.origin_id      = origin_id
         self.destination_id = destination_id
         self.contains_id    = contains_id
+        self.zones          = 0
+        self.zone_suffixes  = zone_suffixes
         
         Fare.__init__(self, fare_id=fare_id, operator=operator, line=line, price=price, transfers=transfers,
                       transfer_duration=transfer_duration, start_time=start_time, end_time=end_time,
                       champ_line_name=champ_line_name, champ_mode=champ_mode)
-        
+
+    def isZoneFare(self):
+        if self.origin_id and self.destination_id:
+            return True
+        return False
+    
     def setModeType(self, modenum):
         self.fasttrips_mode = WranglerLookups.MODENUM_TO_FTMODETYPE[modenum]
         return self.fasttrips_mode
@@ -382,6 +390,7 @@ class FastTripsFare(Fare):
         '''
         if fare_id:
             self.fare_id = fare_id
+            if suffix: self.fare_id = '%s_%s' % (fare_id, suffix)
             return self.fare_id
         elif self.operator and self.line:
             operpart = self.operator.lower()
@@ -403,19 +412,20 @@ class FastTripsFare(Fare):
         else:
             modepart = self.mode
             self.fare_id    = '%s_%s' % (operpart, modepart)
-        
-        if self.origin_id and self.destination_id:
-            if operpart == 'caltrain':
-                orig = str(self.origin_id).lower()[3:]
-                dest = str(self.destination_id).lower()[3:]
-            elif operpart == 'bart':
-                orig = str(self.origin_id).lower().replace(' bart','')
-                dest = str(self.destination_id).lower().replace(' bart','')
-            else:
-                orig = str(self.origin_id).lower()
-                dest = str(self.destination_id).lower()
-                
-            self.fare_id = '%s_zone_%s_to_%s' % (self.fare_id, orig, dest)
+
+        if self.zone_suffixes:
+            if self.origin_id and self.destination_id:
+                if operpart == 'caltrain':
+                    orig = str(self.origin_id).lower()[3:]
+                    dest = str(self.destination_id).lower()[3:]
+                elif operpart == 'bart':
+                    orig = str(self.origin_id).lower().replace(' bart','')
+                    dest = str(self.destination_id).lower().replace(' bart','')
+                else:
+                    orig = str(self.origin_id).lower()
+                    dest = str(self.destination_id).lower()
+                    
+                self.fare_id = '%s_zone_%s_to_%s' % (self.fare_id, orig, dest)
 
         if suffix:
             self.fare_id = '%s_%s' % (self.fare_id, str(suffix))

@@ -771,11 +771,10 @@ class TransitNetwork(Network):
                 supplinks = self.parseSupplinks(f.read(),production='transit_file',verbosity=0)
                 # only need to get walk supplinks for AM since they are the same in all time periods.
                 if walk_am_only and tp != "AM":
-                    WranglerLogger.debug("Skipping walk supplinks from %s; only AM required" % filename)
                     walk_removed = []
                     for s in supplinks:
                         if isinstance(s,Supplink):
-                            if s.isWalkAccess() or s.isWalkEgress(): continue
+                            if s.isWalkAccess() or s.isWalkEgress() or s.isWalkFunnel(): continue
                             walk_removed.append(s)
                     WranglerLogger.debug("Skipped %d of %d supplinks in %s" % (len(supplinks)-len(walk_removed),len(supplinks),filename))
                     supplinks = walk_removed
@@ -804,8 +803,8 @@ class TransitNetwork(Network):
                 if isinstance(supplink, Supplink):
                     ftsupp = None
                     if supplink.isWalkAccess():
-                        if (supplink.Anode, supplink.Bnode) in self.fasttrips_walk_supplinks.keys():
-                            continue
+##                        if (supplink.Anode, supplink.Bnode) in self.fasttrips_walk_supplinks.keys():
+##                            continue
                         try:
                             ftsupp = FastTripsWalkSupplink(walkskims=walkskims,nodeToTaz=nodeToTaz,
                                                            maxTaz=maxTaz, template=supplink)
@@ -855,8 +854,8 @@ class TransitNetwork(Network):
                                 self.fasttrips_transfer_supplinks[(ftsupp.Anode,ftsupp.Bnode,ftsupp.from_route_id,ftsupp.to_route_id)] = ftsupp
                             
                     elif supplink.isDriveAccess() or supplink.isDriveEgress():
-                        if (supplink.Anode,supplink.Bnode,tp) in self.fasttrips_drive_supplinks.keys():
-                            continue
+##                        if (supplink.Anode,supplink.Bnode,tp) in self.fasttrips_drive_supplinks.keys():
+##                            continue
                         ftsupp = FastTripsDriveSupplink(hwyskims=hwyskims, pnrNodeToTaz=pnrNodeToTaz, tp=tp, template=supplink)
                         self.fasttrips_drive_supplinks[(ftsupp.Anode,ftsupp.Bnode,tp)] = ftsupp
                     else:
@@ -864,8 +863,6 @@ class TransitNetwork(Network):
                 if counter % 10000 == 0:
                     WranglerLogger.debug("processed %7d of %7d records" % (counter,total_supplinks))
         WranglerLogger.debug("processed %7d of %7d records" % (counter,total_supplinks))
-                    ##except Exception as e:
-                        ##WranglerLogger.warn('got error writing access file for SUPPLINK: %s' % str(supplink))
         
     @staticmethod
     def initializeTransitCapacity(directory="."):
@@ -911,7 +908,6 @@ class TransitNetwork(Network):
         
         for i in to_pop:
             popped = farelinks.pop(i)
-            ##WranglerLogger.debug("POPPED: %s" % str(popped))
         self.farelinks_fares = farelinks
 
     def addStationNamestoODFares(self,station_lookup):
@@ -989,7 +985,7 @@ class TransitNetwork(Network):
                     #WranglerLogger.warn("Non-integer pnr node %s for pnr" % (str(pnr.pnr)
                 n = FastTripsNode(pnr_nodenum, coord_dict)
                 self.fasttrips_pnrs[pnr_nodenum] = n
-                
+        
     '''
     stops:      stop_id, stop_code*, stop_name, stop_desc*, stop_lat, stop_lon, zone_id*, location_type*,
                 parent_station*,stop_timezone*,stop_timezone*, wheelchair_boarding*
@@ -1020,14 +1016,13 @@ class TransitNetwork(Network):
 
     def writeFastTrips_PNRs(self, f='pnr.txt', path='.', writeHeaders=True):
         df_pnrs = None
-        for pnr in self.fasttrips_pnrs:
+        pnr_data = []
+        for pnr in self.fasttrips_pnrs.values():
             if not isinstance(pnr, FastTripsNode): continue
-            WranglerLogger.debug("PNR: %s" % str(pnr))
-            df_row = node.asDataFrame(['stop_id','stop_lat','stop_lon'])
-            if not isinstance(df_pnrs, pd.DataFrame):
-                df_pnrs = df_row
-            else:
-                df_pnrs = df_pnrs.append(df_row)
+            data = pnr.asList(['stop_id','stop_lat','stop_lon'])
+            pnr_data.append(data)
+        df_pnrs = pd.DataFrame(columns=['lot_id','lot_lat','lot_lon'],data=pnr_data)
+        df_pnrs = df_pnrs.drop_duplicates()
         df_pnrs.to_csv(os.path.join(path, f),index=False, headers=['lot_id','lot_lat','lot_lon'])
         
     def writeFastTrips_Vehicles(self, f='vehicles.txt', path='.', writeHeaders=True):
@@ -1046,7 +1041,6 @@ class TransitNetwork(Network):
                     else:
                         df_vehicles = df_vehicles.append(df_row)
                     vehicles.append(vtype)
-
         df_vehicles.to_csv(os.path.join(path,f),index=False,headers=writeHeaders)
 
     def writeFastTrips_Access(self, f_walk='walk_access.txt', f_drive='drive_acces.txt', f_transfer='transfer.txt', path='.', writeHeaders=True):
@@ -1063,7 +1057,6 @@ class TransitNetwork(Network):
         for supplink in self.fasttrips_walk_supplinks.values():
             try:
                 slist = supplink.asList(walk_columns)
-                #WranglerLogger.debug('walk access: %s' % str(slist))
                 walk_data.append(slist)
             except Exception as e:
                 WranglerLogger.warn(str(e))
@@ -1071,7 +1064,6 @@ class TransitNetwork(Network):
         for supplink in self.fasttrips_drive_supplinks.values():
             try:
                 slist = supplink.asList(drive_columns)
-                ##WranglerLogger.debug('drive access: %s' % str(slist))
                 drive_data.append(slist)
             except Exception as e:
                 WranglerLogger.warn(str(e))
@@ -1316,12 +1308,40 @@ class TransitNetwork(Network):
         This is a function added for fast-trips.
         '''
         fasttrips_fares = []
+        fare_dict = {} # dict of (fare_id,price) -> list of fares.  This will be used to collapse zone fares that currently share a fare_id
         for line in self.lines:
             if isinstance(line,TransitLine):
-                fares = line.getFastTripsFares_asList()
+                fares = line.getFastTripsFares_asList(zone_suffixes=False)  # zone_suffixes=False means that fare_ids will not be unique
                 WranglerLogger.debug("GOT %d FAST-TRIPS FARE RULES FOR LINE %s" % (len(fares),line.name))
                 for fare in fares:
-                    if fare not in fasttrips_fares: fasttrips_fares.append(fare)
+                    if (fare.fare_id,fare.price) not in fare_dict.keys():
+                        fare_dict[(fare.fare_id,fare.price)] = []
+                    fare_dict[(fare.fare_id,fare.price)].append(fare)
+                    ##if fare not in fasttrips_fares: fasttrips_fares.append(fare)
+                    
+        # go through each fare, check if identical with another fare on fare_id and price.
+        # if so then they will get the same fare_id, although they should still get multiple
+        # rules for unique zone-zone combos
+        keys = fare_dict.keys()
+        keys.sort()
+        last_fare_id = None
+        i = 1
+        for key in keys:
+            if key[0] != last_fare_id: i = 1
+            last_fare_id = key[0]
+            for fare in fare_dict[key]:
+                if fare.isZoneFare():
+                    fare_suffix = 'Z%d' % i
+                elif i > 1:
+                    fare_suffix = 'F%d' % i
+                else:
+                    fare_suffix = None
+                    
+                fare.setFareId(fare_id=fare.fare_id,suffix=fare_suffix)
+                fare.setFareClass()
+                fasttrips_fares.append(fare)
+                ##WranglerLogger.debug("fare_id: %s" % str(fare.fare_id))
+            i += 1
         self.fasttrips_fares = fasttrips_fares
 
         count = 0
