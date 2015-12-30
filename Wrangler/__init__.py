@@ -1,9 +1,10 @@
-import sys
+import sys,os
 from .Linki import Linki
 from .Network import Network
 from .NetworkException import NetworkException
 from .PNRLink import PNRLink
 from .Supplink import Supplink
+sys.path.insert(0, os.path.join(os.path.dirname(__file__),"..\_static"))
 from .TransitAssignmentData import TransitAssignmentData ##
 from .TransitCapacity import TransitCapacity
 from .TransitLine import TransitLine
@@ -14,7 +15,6 @@ from .HighwayNetwork import HighwayNetwork
 from .Logger import setupLogging, WranglerLogger
 from .Node import Node
 from .HwySpecsRTP import HwySpecsRTP
-
 
 __all__ = ['NetworkException', 'setupLogging', 'WranglerLogger',
            'Network', 'TransitAssignmentData', 'TransitNetwork', 'TransitLine', 'TransitParser',
