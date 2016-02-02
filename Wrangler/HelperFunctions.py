@@ -74,26 +74,67 @@ def removeDuplicatesFromList(l):
             this_list.remove(x)
     return this_list
 
-def minutesPastMidnightToHHMMSS(minutes):
+def minutesPastMidnightToHHMMSS(minutes, sep=None):
     if isinstance(minutes, float):
-        seconds = minutes - int(minutes)
-        seconds *= 60
-        ss = '%02d' % int(round(seconds,0))
+        seconds = minutes * 60
+        seconds = round(seconds,0)
+        hhmmss = secondsPastMidnightToHHMMSS(seconds,sep)
+        return hhmmss
+##        seconds = minutes - int(minutes)
+##        seconds *= 60
+##        ss = '%02d' % int(round(seconds,0))
     else:
         ss = '00'
         
     minutes = int(minutes)
     hh = '%02d' % (minutes/60)
     mm = '%02d' % (minutes%60)
-    return hh+mm+ss
+    if sep == None: sep = ''
+    return hh+sep+mm+sep+ss
 
-def secondsPastMidnightToHHMMSS(seconds):
+def secondsPastMidnightToHHMMSS(seconds, sep=None):
     seconds = int(seconds)
     hh = '%02d' % (seconds/3600)
     mm = '%02d' % ((seconds%3600)/60)
     ss = '%02d' % ((seconds%3600)%60)
-    return hh+mm+ss
+    if sep == None: sep = ''
+    return hh+sep+mm+sep+ss
 
+def TimeStringToCHAMPTimePeriod(hhmmss, sep=None):
+        if hhmmss == None:
+            tod = 'allday'
+            return tod
+        
+        re_hhmmss = re.compile('\d\d\d\d\d\d')
+        if sep:
+            split = hhmmss.split(sep)
+            if len(split) != 3:
+                raise NetworkException('Invalid timestring format for hhmmss: %s' % str(hhmmss))
+            
+            hhmmss = '%02d%02d%02d' % (int(split[0]), int(split[1]), int(split[2]))
+        
+        m = re_hhmmss.match(hhmmss)
+        if not m:
+            raise NetworkException('Invalid timestring format for hhmmss: %s' % str(hhmmss))
+        
+        if hhmmss < '030000':
+            tod = 'EV'
+        elif hhmmss < '060000':
+            tod = 'EA'
+        elif hhmmss < '090000':
+            tod = 'AM'
+        elif hhmmss < '153000':
+            tod = 'MD'
+        elif hhmmss < '183000':
+            tod = 'PM'
+        elif hhmmss < '240000':
+            tod = 'EV'
+        else:
+            new_hh = '%02d' % (int(hhmmss[:2]) - 24)
+            new_hhmmss = new_hh + hhmmss[2:]
+            tod = convertStringToTimePeriod(new_hhmmss)
+        return tod
+    
 def getChampNodeNameDictFromFile(filename):
     book = xlrd.open_workbook(filename)
     sh = book.sheet_by_index(0)
