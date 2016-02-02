@@ -2,7 +2,10 @@ import copy
 from .NetworkException import NetworkException
 from .WranglerLookups import WranglerLookups
 from .Logger import WranglerLogger
-from SkimUtil import Skim, HighwaySkim, WalkSkim
+try:
+    from SkimUtil import Skim, HighwaySkim, WalkSkim
+except:
+    WranglerLogger.debug("Could not find SkimUtil.  Some Supplink features will be unavailable")
 
 __all__ = ['Supplink']
 
