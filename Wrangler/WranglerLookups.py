@@ -2,6 +2,8 @@ class WranglerLookups:
 
     ALL_TIMEPERIODS = ["AM","MD","PM","EV","EA"]
     
+    TIME_PERIOD_TOD_ORDER = ["EA","AM","MD","PM","EV"]
+    
     HOURS_PER_TIMEPERIOD = {"AM":3.0, #what about 4-6a?
                             "MD":6.5,
                             "PM":3.0,
@@ -16,11 +18,11 @@ class WranglerLookups:
                              "EA":180, # 3am - 6am
                              }
 
-    TIMEPERIOD_TO_TIMERANGE = {'AM':('060000','085959'),
-                               'MD':('090000','152959'),
-                               'PM':('153000','182959'),
-                               'EV':('183000','270000'),
-                               'EA':('030000','055959')}
+    TIMEPERIOD_TO_TIMERANGE = {'AM':('06:00:00','08:59:59'),
+                               'MD':('09:00:00','15:29:59'),
+                               'PM':('15:30:00','18:29:59'),
+                               'EV':('18:30:00','27:00:00'),
+                               'EA':('03:00:00','05:59:59')}
     
     MODETYPE_TO_MODES = {"Local":[11,12,16,17,18,19],
                          "BRT":[13,20],
@@ -121,6 +123,7 @@ class WranglerLookups:
     TRANSIT_MODES       = [11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]
     NONTRANSIT_TYPES    = ['non-transit']
     TRANSIT_TYPES       = ['local bus', 'LRT', 'BRT', 'Premium', 'Ferry', 'BART']
+    #OFFBOARD_PAYMENT_AGENCIES = ['caltrain','amtrak','ace','bart','airbart','ebart','ferry']
     
     OPERATOR_ID_TO_NAME = {'101_': "caltrain", '102_': "amtrak", '103_': "amtrak", '104_': "ace",
                            '105_': "dumbarton", '106_': "smart", '107_': "bart", '108_': "bart",
@@ -135,7 +138,7 @@ class WranglerLookups:
                            '47_': "union_city_transit",
                            '49_': "airbart",
                            '51_': "cccta", '52_': "cccta", '54_': "tri_delta_transit",
-                           '56_': "westcat", '57_': "westcat", '59_': "vallejo_transit", '60_': "vallejo_transit",
+                           '56_': "westcat", '57_': "westcat", '59_': "soltrans", '60_': "soltrans",
                            '62_': "fast", '63_': "fast", '64_': "fast",
                            '65_': "american_canyon", '66_': "vacaville", '68_': "benicia",
                            '70_': "vine", '71_': "vine",
@@ -145,6 +148,40 @@ class WranglerLookups:
                            '84_': "golden_gate_transit",
                            '90_': "ferry", '91_': "ferry", '92_': "ferry", '93_': "ferry", '94_': "ferry", '95_': "ferry",
                            'EBA': "ebart", 'MUN': "sf_muni", 'PRES': "presidigo", 'SFS': "sfsu_shuttle",}
+
+    OPERATOR_NAME_TO_URL = {'caltrain':'http://www.caltrain.com/',
+                            'amtrak':'http://www.amtrak.com/',
+                            'ace':'https://www.acerail.com/',
+                            'dumbarton':'http://dumbartonexpress.com/',
+                            'smart':'http://main.sonomamarintrain.org/',
+                            'bart':'https://www.bart.gov/',
+                            'west_berkeley_shuttle':'http://westberkeleyshuttle.net/',
+                            'broadway_shuttle':'http://www.meetdowntownoak.com/shuttle.php',
+                            'caltrain_shuttle':'http://www.caltrain.com/',
+                            'samtrans':'http://www.samtrans.com/',
+                            'scvta':'http://www.vta.org/',
+                            'ac_transit':'http://www.actransit.org/',
+                            'lavta':'http://www.wheelsbus.com/',
+                            'union_city_transit':'http://www.unioncity.org/departments/transit-340',
+                            'airbart':'https://www.bart.gov/',
+                            'cccta':'http://countyconnection.com/',
+                            'tri_delta_transit':'http://www.trideltatransit.com/',
+                            'westcat':'http://www.westcat.org/',
+                            'soltrans':'http://www.soltransride.com/',
+                            'fast':'http://www.fasttransit.org/',
+                            'american_canyon':'http://www.ridethevine.com/american-canyon-transit',
+                            'vacaville':'http://www.citycoach.com/',
+                            'benicia':'http://www.ci.benicia.ca.us/transit',
+                            'vine':'http://www.ridethevine.com/vine',
+                            'sonoma_county_transit':'http://sctransit.com/',
+                            'santa_rosa':'http://ci.santa-rosa.ca.us/departments/transit/citybus/pages/default.aspx',
+                            'petaluma':'http://cityofpetaluma.net/pubworks/transit-sub.html',
+                            'golden_gate_transit':'http://goldengatetransit.org/',
+                            'ebart':'https://www.bart.gov',
+                            'sf_muni':'https://www.sfmta.com/',
+                            'PRES':'http://presidiobus.com/',
+                            'SFS':'sfsu_shuttle',
+                            }
 
     MODENUM_TO_FTMODETYPE = {11:'local_bus',
                              12:'express_bus',
@@ -168,7 +205,9 @@ class WranglerLookups:
                              30:'high_speed_rail',
                              31:'ferry',
                              32:'heavy_rail'}
-
+    
+    OFFBOARD_FTMODETYPES = ['commuter_rail','heavy_rail','regional_rail','inter_regional_rail','high_speed_rail','ferry']
+    OFFBOARD_FTAGENCIES = ['bart','amtrak','ferry']
         ##Service type:
         ##0 - Tram, streetcar, light rail
         ##1 - Subway, metro

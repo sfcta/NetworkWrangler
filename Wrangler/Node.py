@@ -155,6 +155,13 @@ class Node(object):
         Node.node_to_zone = node_to_zone
 
     @staticmethod
+    def addNodeToZone(node, zone):
+        if node in Node.node_to_zone.keys():
+            if zone != Node.node_to_zone[node]:
+                WranglerLogger.warn("Overwriting Zone ID %s with %s for Node %s" % (str(zone), str(Node.node_to_zone[node]), str(node)))
+        Node.node_to_zone[node] = zone
+
+    @staticmethod
     def setOnStreetNodes(onstreet_nodes):
         if not isinstance(onstreet_nodes, list): raise NetworkException("INVALID ONSTREET_NODES LIST")
         Node.onstreet_nodes = onstreet_nodes
@@ -191,8 +198,7 @@ class FastTripsNode(Node):
         # stops optional
         self.stop_code              = None
         self.stop_desc              = None
-##        if len(Node.node_to_zone) == 0:
-##            WranglerLogger.warn("Trying to construct a FastTripsNode without ZONE_ID")
+
         if self.stop_id in Node.node_to_zone.keys():
             self.zone_id            = Node.node_to_zone[self.stop_id]
         else:
@@ -239,6 +245,4 @@ class FastTripsNode(Node):
         data = self.asList(columns)        
         df = pd.DataFrame(columns=columns,data=[data])
         return df
-        
-            ##if arg not in self.keys()self[arg]
         

@@ -1,5 +1,5 @@
 import re
-from .Regexes import nodepair_pattern
+from .Regexes import * #nodepair_pattern
 
 __all__ = ['TransitLink']
 
@@ -33,14 +33,14 @@ class TransitLink(dict):
     def addNodesToSet(self, set):
         """ Add integer versions of the nodes in this like to the given set
         """
-        m = re.match(nodepair_pattern, self.id)
+        m = re.match(Regexes.nodepair_pattern, self.id)
         set.add(int(m.group(1)))
         set.add(int(m.group(2)))
         
     def setId(self, id):
         self.id = id
 
-        m = re.match(nodepair_pattern, self.id)
+        m = re.match(Regexes.nodepair_pattern, self.id)
         self.Anode = int(m.group(1))
         self.Bnode = int(m.group(2))  
 

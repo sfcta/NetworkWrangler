@@ -9,6 +9,14 @@ from .WranglerLookups import WranglerLookups
 from .HelperFunctions import *
 from .Regexes import *
 
+print "TRANSITLINE module"
+try:
+    from Overrides import *
+    WranglerLogger.debug("Overrides module found; importing Overrides")
+except Exception as e:
+    WranglerLogger.debug("No Overrides module found; skipping import of Overrides")
+
+
 __all__ = ['TransitLine']
 
 class TransitLine(object):
@@ -173,7 +181,7 @@ class TransitLine(object):
         if od_fares:
             for fare in od_fares:
                 if isinstance(fare,ODFare):
-                    if fare.fr_node in nodes and fare.to_node in nodes:
+                    if fare.from_node in nodes and fare.to_node in nodes:
                         self.od_fares.append(fare)
                         WranglerLogger.debug("ADDED OD FARE %s TO LINE %s" % (fare,self.name))
         if xf_fares:
@@ -184,11 +192,11 @@ class TransitLine(object):
                             self.board_fare = copy.deepcopy(fare)
                             self.board_fare.setOperatorAndLineFromChamp(self.name)
                             WranglerLogger.debug("ADDED FARE %s ($%.2f) TO LINE %s for MODETYPE %s" % (self.board_fare.fare_id, float(self.board_fare.price)/100, self.name, self.getModeType()))
-                        elif (type(self.board_fare) == type(fare) and self.board_fare.price == fare.price and self.board_fare.fr_type == fare.fr_type and self.board_fare.to_type == fare.to_type):
+                        elif (type(self.board_fare) == type(fare) and self.board_fare.price == fare.price and self.board_fare.from_type == fare.from_type and self.board_fare.to_type == fare.to_type):
                             pass #WranglerLogger.debug("NOT ADDING IDENTICAL ACCESS LINK")
                         elif fare.type == 'xfer':
                             pass #WranglerLogger.debug("NOT ADDING XFER %s" % str(fare))
-                        elif fare.fr_type == None or fare.to_type == None:
+                        elif fare.from_type == None or fare.to_type == None:
                             pass #WranglerLogger.debug("NOT ADDING FARE WITH UNUSED TYPE %s" % str(fare))
                         elif fare.type == 'na':
                             pass #WranglerLogger.debug("NOT ADDING FARE WITH UNUSED TYPE %s" % str(fare))
@@ -261,86 +269,10 @@ class TransitLine(object):
         od_fare_dict = {}
         for fare in od_fares:
             if isinstance(fare,ODFare):
-                a=fare.fr_node
+                a=fare.from_node
                 b=fare.to_node
                 od_fare_dict[(a,b)] = fare
         return od_fare_dict
-    
-    def getFastTripsFares_asList(self, zone_suffixes=False):
-        '''
-        This is a function added for fast-trips.
-        '''
-        # walk the nodes
-        rules = []
-        rule = None
-        origin_id, destination_id = None, None
-        price = self.board_fare.price
-        nodes = self.getNodeSequenceAsInt(ignoreStops=False)
-        od_fare_dict = None
-
-        if self.hasODFares():
-            od_fare_dict = self.getODFaresDict()
-            
-        if self.hasFarelinks():
-            last_rule = None
-            stop_a = None
-            stop_b = None
-            for a, idx in zip(nodes[:-1],range(len(nodes[:-1]))):
-                # iterate over all origins
-                if a > 0:
-                    # if it's a stop, get the zone and reset the stop increment.
-                    stop_a          = a
-                    origin_id       = Node.node_to_zone[stop_a]
-                    price           = self.board_fare.price
-                    cost_increment  = 0
-                    stop_b          = None
-                else:
-                    continue # don't care about nodes that aren't stops.
-                
-                for _b, b in zip(nodes[idx:-1],nodes[idx+1:]):
-                    # iterate over destinations.  b is the dest, (_b,b) is the link, to check for farelinks                        
-                    for fare in self.farelinks:
-                        if isinstance(fare, FarelinksFare):
-                            # if this link is a farelink, increment the price by the cost on the farelink.
-                            if (abs(_b),abs(b)) == (int(fare.farelink.Anode), int(fare.farelink.Bnode)):
-                                cost_increment += fare.price
-                                price = self.board_fare.price + cost_increment
-                                # WranglerLogger.debug("COST INCREMENT ON LINE %s to $%.2f between %s and %s" % (self.name, float(price)/100, str(origin_id), str(destination_id)))
-                                
-                    if od_fare_dict:
-                        od_fare = od_fare_dict[(a,b)]
-                        price += od_fare.price
-                        
-                    if b > 0:
-                        stop_b          = b
-                        destination_id  = Node.node_to_zone[stop_b]
-                        modenum = int(self.attr['MODE'])
-                        rule = FastTripsFare(champ_line_name = self.name,champ_mode=modenum, price=price,origin_id=origin_id,destination_id=destination_id,zone_suffixes=zone_suffixes)
-                    else:
-                        continue
-                    if rule == last_rule: continue
-                    if rule not in rules:
-                        rules.append(rule)
-                    last_rule = copy.deepcopy(rule)
-                    
-        elif self.hasODFares():
-            for fare in self.od_fares:
-                if isinstance(fare, ODFare):
-                    modenum = int(self.attr['MODE'])
-                    rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum,price=self.board_fare.price + fare.price,origin_id=fare.fr_name,destination_id=fare.to_name,zone_suffixes=zone_suffixes)
-                    ##WranglerLogger.debug('%s' % str(rule))
-                    if rule not in rules:
-                        rules.append(rule)
-                        
-        else:
-            # origin_id and destination_id only matter for lines that cross farelinks.
-            origin_id       = None
-            destination_id  = None
-            modenum = int(self.attr['MODE'])
-            rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum, price=self.board_fare.price,origin_id=origin_id,destination_id=destination_id,zone_suffixes=zone_suffixes)
-            rules.append(rule)
-                
-        return rules
                 
     def setTravelTimes(self, highway_networks, extra_links=None):
         '''
@@ -399,8 +331,8 @@ class TransitLine(object):
                                     if distkey: dist = float(this_link[distkey])
                                     else: WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `DIST`" % (self.name, link_id, tp))
                                     if speedkey and distkey:
-                                        #WranglerLogger.debug("LINE %s, LINK %s, TOD %s: CALCULATING TRAVEL TIME USING LINK'S DISTANCE AND SPEED" % (self.name, link_id, tp))
-                                        link['BUSTIME_%s' % tp] = (dist / 5280) / xyspeed
+                                        WranglerLogger.debug("LINE %s, LINK %s, TOD %s: CALCULATING TRAVEL TIME USING LINK'S DISTANCE AND SPEED" % (self.name, link_id, tp))
+                                        link['BUSTIME_%s' % tp] = (60 * dist / 5280) / xyspeed
                                         found = True
                                     else:
                                         WranglerLogger.debug(repr(this_link))
@@ -422,132 +354,10 @@ class TransitLine(object):
                                 # if no speed attribute there, then assume it's 15 mph
                                 WranglerLogger.debug("LINE %s, LINK %s, TOD %s: NO XY-SPEED.  Setting XYSPEED = 15" % (self.name, link_id, tp))
                                 xyspeed = 15
-                        link['BUSTIME_%s' % tp] = (dist / 5280) / xyspeed
+                        link['BUSTIME_%s' % tp] = (60 * dist / 5280) / xyspeed
+                        #WranglerLogger.debug('DIST %.2f, SPEED %d, TRAVELTIME %.2f' % (dist, xyspeed, link['BUSTIME_%s' % tp]))
 
             self.links[(a_node,b_node)] = link
-            
-    def setFirstDepartures(self):
-        '''
-        Sets the departure time of the first run of the TransitLine for each time period.
-        Optionally takes a dictionary of time periods to minutes-past-midnight.  Defaults to
-        CHAMP's five time periods.
-        '''                                
-        if self.hasService:
-            all_timeperiods = WranglerLookups.MINUTES_PAST_MIDNIGHT.keys()
-            for tp in all_timeperiods:
-                headway = self.getFreq(tp)
-                
-                if headway > 0:
-                    time_period_start = WranglerLookups.MINUTES_PAST_MIDNIGHT[tp]
-                    # TO-DO: ADD IF PREV TP HAS SCHEDULED TIMES, USE THAT RATHER THAN A RANDOM NEW TIME
-                    self.otherattr["DEPT_%s" % tp] = round(self.get_psuedo_random_departure_time(time_period_start, headway),0)
-        else:
-            raise NetworkException("Line %s does not have service, so schedule start times cannot be set" % self.name)
-
-    def get_psuedo_random_departure_time(self, time_period_start, headway, min_start_time = 0):
-        '''
-        Using a normal distribution, computes a pseudo random departure time in number of minutes based on a time window. The
-        time window ranges from a default of 0 to half the headway. From this range, the mean and standard deviation are 
-        calculated and then used as paramaters in the random.normalvariate function. This result is added to time_period_start, 
-        and result is the departure time in number of minutes past midnight. The idea behind this methodology is that first 
-        departures 1) should not all happen at the same time, 2) Indviudal routes should have a first departure time well less than 
-        their headway so that their hourly frequencies are met at most stops, and 3) longer headways (less fequent service) should 
-        have start times farther away from the begining of the time period compared to routes with more frequent service. Item 3
-        is not guaranteed but highly probable.    
-        '''
-        import random
-        # Assume max start time is half the headway for now:
-        max_start_time = headway * .5
-        start_time = max_start_time
-        # Make sure start_time is < max_start_time
-        while start_time >= max_start_time or start_time < 0:
-            mean = (max_start_time + min_start_time)/2
-            # Using 3 because 3 Standard deviatons should account for 99.7% of a population in a normal distribution. 
-            sd = mean/3
-            start_time = random.lognormvariate(mean, sd)
-        start_time = start_time + time_period_start 
-        return start_time
-
-    def writeFastTrips_Shape(self, f, writeHeaders=False):
-        '''
-        Writes fast-trips style shapes record for this line.
-            shape_id, shape_pt_lat, shape_pt_long, shape_pt_sequence, shape_dist_traveled (optional)
-            <string>  <float>       <float>        <integer>          <float>
-        Writes a header if writeHeaders = True
-        '''
-        cum_dist = 0
-        track_dist = True
-        seq = 1
-        if writeHeaders: f.write('shape_id,shape_pt_lat,shape_pt_long,shape_pt_sequence,shape_dist_traveled\n')
-        
-        for a, b in zip(self.n[:-1],self.n[1:]):
-            if not isinstance(a, Node) or not isinstance(b, Node):
-                ex = "Not all nodes in line %s are type Node" % self.name
-                WranglerLogger.debug(ex)
-                raise NetworkException(ex)
-            else:
-                a_node, b_node = abs(int(a.num)), abs(int(b.num))
-                f.write('%s,%f,%f,%d,%f\n' % (self.name, a.y ,a.x, seq, cum_dist))
-                seq += 1
-                
-        # write the last node
-        f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].y, self.n[-1].x, seq, cum_dist))
-    
-    def writeFastTrips_Trips(self, f_trips, f_trips_ft, f_stoptimes, f_stoptimes_ft, id_generator, writeHeaders=False):
-        '''
-        Writes fast-trips style stop_times records for this line.
-        Writes a header if writeHeaders = True
-        '''
-        if writeHeaders:
-            f_trips.write('route_id,service_id,trip_id,shape_id\n')
-            f_trips_ft.write('trip_id,vehicle_name\n')
-            f_stoptimes.write('trip_id,arrival_time,departure_time,stop_id,stop_sequence\n')
-            f_stoptimes_ft.write('trip_id,stop_id,pay_at_station,real_time_data,front_board_only,reliability,level_boarding\n')
-
-        for tp in WranglerLookups.ALL_TIMEPERIODS:
-            headway = self.getFreq(tp)
-            if not headway > 0:
-                continue
-            
-            departure = self.otherattr['DEPT_%s' % tp]
-            tp_end = WranglerLookups.MINUTES_PAST_MIDNIGHT[tp] + WranglerLookups.HOURS_PER_TIMEPERIOD[tp] * 60
-            while departure < tp_end:
-                cum_time = 0
-                stop_time = departure + cum_time
-                stop_time_hhmmss = minutesPastMidnightToHHMMSS(stop_time)
-                seq = 1
-                trip_id = id_generator.next()
-                f_trips.write('%s,%d,%d,%s\n' % (self.name,1,trip_id,self.name))
-                if tp in self.vehicle_types.keys():
-                    vtype = self.vehicle_types[tp]
-                else:
-                    vtype = self.vehicle_types['allday']                    
-                f_trips_ft.write('%s,%s\n' % (self.name,vtype))
-                
-                for a, b in zip(self.n[:-1], self.n[1:]):
-                    if not isinstance(a, Node) or not isinstance(b, Node):
-                        ex = "Not all nodes in line %s are type Node" % self.name
-                        WranglerLogger.debug(ex)
-                        raise NetworkException(ex)
-                    else:
-                        a_node, b_node = abs(int(a.num)), abs(int(b.num))
-                        ab_link = self.links[(a_node,b_node)]
-                        try:
-                            traveltime = float(ab_link['BUSTIME_%s' % tp])
-                        except:
-                            WranglerLogger.debug("LINE %s, LINK %s: NO BUSTIME FOUND FOR TP %s" % (self.name, ab_link.id, tp))
-                        rest_time = 0
-                        f_stoptimes.write('%d,%s,%s,%d,%d\n' % (trip_id, stop_time_hhmmss, stop_time_hhmmss, a_node, seq))
-                        try:
-                            cum_time += traveltime
-                            stop_time = departure + cum_time
-                            stop_time_hhmmss = minutesPastMidnightToHHMMSS(stop_time)
-                            seq += 1
-                        except:
-                            print cum_time, stop_time_hhmmss, departure, seq
-                departure += headway
-                f_stoptimes.write('%d,%s,%s,%d,%d\n' % (trip_id, stop_time_hhmmss, stop_time_hhmmss, b_node, seq))
-                f_stoptimes_ft.write('%d,%d,,,,,\n' % (trip_id, b_node))
                 
     def hasService(self):
         """
@@ -943,13 +753,16 @@ class FastTripsTransitLine(TransitLine):
         self.setProofOfPayment()
         if self.board_fare: self.setFareClass()
 
+        self.first_departure_times = {} # tp -> psuedo-random first departure time
+
+    # ** ATTRIBUTE SETTING / GETTING FUNCTIONS **
     def setRouteId(self, route_id=None):
         if route_id:
             self.route_id = route_id
             return self.route_id
 
     def setRouteNameAndAgency(self):
-        m = linename_pattern.match(self.name)
+        m = Regexes.linename_pattern.match(self.name)
         if not m: raise NetworkException('Failed to match linename_pattern on %s' % self.name)
         self.agency_id = WranglerLookups.OPERATOR_ID_TO_NAME[m.groupdict()['operator']]
         self.route_short_name = m.groupdict()['line']
@@ -962,7 +775,7 @@ class FastTripsTransitLine(TransitLine):
         if route_short_name:
             self.route_short_name = route_short_name
             return self.route_short_name
-        m = linename_pattern.match(self.name)
+        m = Regexes.linename_pattern.match(self.name)
         self.route_short_name = m.groupdict()['line']
         return self.route_short_name
     
@@ -970,7 +783,7 @@ class FastTripsTransitLine(TransitLine):
         if route_long_name:
             self.route_long_name = route_long_name
             return self.route_long_name
-        m = linename_pattern.match(self.name)
+        m = Regexes.linename_pattern.match(self.name)
         if m.groupdict()['direction']:
             self.route_long_name = '%s_%s' % (m.groupdict()['line'], m.groupdict()['direction'])
         else:
@@ -988,7 +801,7 @@ class FastTripsTransitLine(TransitLine):
         if agency_id:
             self.agency_id = agency_id
             return self.agency_id
-        m = linename_pattern.match(self.name)
+        m = Regexes.linename_pattern.match(self.name)
         self.agency_id = m.groupdict()['operator']
         return self.agency_id
 
@@ -1021,6 +834,213 @@ class FastTripsTransitLine(TransitLine):
         else:
             self.proof_of_payment = WranglerLookups.MODENUM_TO_PROOF[int(self.attr['MODE'])]
 
+    # ** TRIP SCHEDULING FUNCTIONS **
+    def setFirstDepartures(self, psuedo_random=True, offset=0):
+        '''
+        Sets the departure time of the first run of the TransitLine for each time period.
+        Optionally takes a dictionary of time periods to minutes-past-midnight.  Defaults to
+        CHAMP's five time periods.
+        '''                                
+        if self.hasService:
+            last_period_last_departure = None
+            last_headway = None
+            
+            all_timeperiods = WranglerLookups.TIME_PERIOD_TOD_ORDER
+            prev_timeperiods = copy.deepcopy(all_timeperiods)
+            prev_timeperiods.insert(0,prev_timeperiods.pop())
+            
+            for last_tp, this_tp in zip(prev_timeperiods, all_timeperiods):
+                headway = self.getFreq(this_tp)
+                if headway > 0:
+                    time_period_start = WranglerLookups.MINUTES_PAST_MIDNIGHT[this_tp]
+##                    # TO-DO: ADD IF PREV TP HAS SCHEDULED TIMES, USE THAT RATHER THAN A RANDOM NEW TIME
+##                    if last_tp in self.first_departure_times.keys():
+##                        last_first_departure = self.first_departure_times[last_tp]
+##                        last_headway = self.getFreq(last_tp)
+##                        last_num_runs = WranglerLookups.HOURS_PER_TIMEPERIOD[last_tp] * 60.0 / last_headway
+##                        last_last_departure = 
+                    if psuedo_random:
+                        self.first_departure_times[this_tp] = round(self.get_psuedo_random_departure_time(time_period_start, headway),0)
+                    else:
+                        self.first_departure_times[this_tp] = time_period_start + offset
+        else:
+            raise NetworkException("Line %s does not have service, so schedule start times cannot be set" % self.name)
+##self.otherattr["DEPT_%s" % tp]
+    def get_psuedo_random_departure_time(self, time_period_start, headway, min_start_time = 0):
+        '''
+        Using a normal distribution, computes a pseudo random departure time in number of minutes based on a time window. The
+        time window ranges from a default of 0 to half the headway. From this range, the mean and standard deviation are 
+        calculated and then used as paramaters in the random.normalvariate function. This result is added to time_period_start, 
+        and result is the departure time in number of minutes past midnight. The idea behind this methodology is that first 
+        departures 1) should not all happen at the same time, 2) Indviudal routes should have a first departure time well less than 
+        their headway so that their hourly frequencies are met at most stops, and 3) longer headways (less fequent service) should 
+        have start times farther away from the begining of the time period compared to routes with more frequent service. Item 3
+        is not guaranteed but highly probable.    
+        '''
+        import random
+        # Assume max start time is half the headway for now:
+        max_start_time = headway * .5
+        start_time = max_start_time
+        # Make sure start_time is < max_start_time
+        while start_time >= max_start_time or start_time < 0:
+            mean = (max_start_time + min_start_time)/2
+            # Using 3 because 3 Standard deviatons should account for 99.7% of a population in a normal distribution. 
+            sd = mean/3
+            start_time = random.lognormvariate(mean, sd)
+        start_time = start_time + time_period_start 
+        return start_time
+
+##    def scheduleFastTrips_Trips(self, id_generator, default_dwell_time=0):
+##        for tp in WranglerLookups.ALL_TIMEPERIODS:
+##            headway = self.getFreq(tp)
+##            if not headway > 0:
+##                continue
+##
+##            trip_departure = self.otherattr['DEPT_%s' % tp]
+##            tp_end = WranglerLookups.MINUTES_PAST_MIDNIGHT[tp] + WranglerLookups.HOURS_PER_TIMEPERIOD[tp] * 60
+##            while trip_departure < tp_end:
+##                cum_time = 0
+##                stop_time = departure + cum_time
+##                stop_time_hhmmss = minutesPastMidnightToHHMMSS(stop_time)
+##                seq = 1
+##                trip_id = id_generator.next()
+
+    # ** FARE FUNCTIONS **
+    def getFastTripsFares_asList(self, zone_suffixes=False, price_conversion=1):
+        '''
+        This is a function added for fast-trips.
+        '''
+        # walk the nodes
+        rules = []
+        rule = None
+        origin_id, destination_id = None, None
+        price = self.board_fare.price
+        nodes = self.getNodeSequenceAsInt(ignoreStops=False)
+        od_fare_dict = None
+
+        if self.hasODFares():
+            od_fare_dict = self.getODFaresDict()
+            
+        if self.hasFarelinks():
+            last_rule = None
+            stop_a = None
+            stop_b = None
+            for a, idx in zip(nodes[:-1],range(len(nodes[:-1]))):
+                # iterate over all origins
+                if a > 0:
+                    # if it's a stop, get the zone and reset the stop increment.
+                    stop_a          = a
+                    origin_id       = Node.node_to_zone[stop_a]
+                    price           = self.board_fare.price
+                    cost_increment  = 0
+                    stop_b          = None
+                else:
+                    continue # don't care about nodes that aren't stops.
+                
+                for _b, b in zip(nodes[idx:-1],nodes[idx+1:]):
+                    # iterate over destinations.  b is the dest, (_b,b) is the link, to check for farelinks                        
+                    for fare in self.farelinks:
+                        if isinstance(fare, FarelinksFare):
+                            # if this link is a farelink, increment the price by the cost on the farelink.
+                            if (abs(_b),abs(b)) == (int(fare.farelink.Anode), int(fare.farelink.Bnode)):
+                                cost_increment += fare.price
+                                price = self.board_fare.price + cost_increment
+                                # WranglerLogger.debug("COST INCREMENT ON LINE %s to $%.2f between %s and %s" % (self.name, float(price)/100, str(origin_id), str(destination_id)))
+                                
+                    if od_fare_dict:
+                        od_fare = od_fare_dict[(a,b)]
+                        price += od_fare.price
+                        
+                    if b > 0:
+                        stop_b          = b
+                        destination_id  = Node.node_to_zone[stop_b]
+                        modenum = int(self.attr['MODE'])
+                        rule = FastTripsFare(champ_line_name = self.name,champ_mode=modenum, price=price,origin_id=origin_id,destination_id=destination_id,zone_suffixes=zone_suffixes, price_conversion=price_conversion)
+                    else:
+                        continue
+                    if rule == last_rule: continue
+                    if rule not in rules:
+                        rules.append(rule)
+                    last_rule = copy.deepcopy(rule)
+                    
+        elif self.hasODFares():
+            for fare in self.od_fares:
+                if isinstance(fare, ODFare):
+                    modenum = int(self.attr['MODE'])
+                    rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum,price=self.board_fare.price + fare.price,origin_id=fare.from_name,destination_id=fare.to_name,zone_suffixes=zone_suffixes, price_conversion=price_conversion)
+                    ##WranglerLogger.debug('%s' % str(rule))
+                    if rule not in rules:
+                        rules.append(rule)
+                        
+        else:
+            # origin_id and destination_id only matter for lines that cross farelinks.
+            origin_id       = None
+            destination_id  = None
+            modenum = int(self.attr['MODE'])
+            rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum, price=self.board_fare.price,origin_id=origin_id,destination_id=destination_id,zone_suffixes=zone_suffixes, price_conversion=price_conversion)
+            rules.append(rule)
+                
+        return rules
+    # ** FAST-TRIP FILE WRITING FUNCTIONS **
+    def writeFastTrips_Trips(self, f_trips, f_trips_ft, f_stoptimes, f_stoptimes_ft, id_generator, writeHeaders=False):
+        '''
+        Writes fast-trips style stop_times records for this line.
+        Writes a header if writeHeaders = True
+        '''
+        if writeHeaders:
+            #f_trips.write('route_id,service_id,trip_id,shape_id\n')
+            f_trips.write('trip_id,route_id,service_id,shape_id\n')
+            f_trips_ft.write('trip_id,vehicle_name\n')
+            f_stoptimes.write('trip_id,arrival_time,departure_time,stop_id,stop_sequence\n')
+            f_stoptimes_ft.write('trip_id,stop_id\n')
+            #f_stoptimes_ft.write('trip_id,stop_id,pay_at_station,real_time_data,front_board_only,reliability,level_boarding\n')
+        
+        for tp in WranglerLookups.TIME_PERIOD_TOD_ORDER:
+            headway = self.getFreq(tp)
+            if not headway > 0:
+                continue
+            
+            departure = self.first_departure_times[tp] #self.otherattr['DEPT_%s' % tp]
+            tp_end = WranglerLookups.MINUTES_PAST_MIDNIGHT[tp] + WranglerLookups.HOURS_PER_TIMEPERIOD[tp] * 60
+            while departure < tp_end:
+                cum_time = 0
+                stop_time = departure
+                stop_time_hhmmss = minutesPastMidnightToHHMMSS(stop_time, sep=':')
+                seq = 1
+                trip_id = id_generator.next()
+                f_trips.write('%d,%s,%s,%s\n' % (trip_id,self.name,self.agency_id,self.name))
+                if tp in self.vehicle_types.keys():
+                    vtype = self.vehicle_types[tp]
+                else:
+                    vtype = self.vehicle_types['allday']                    
+                f_trips_ft.write('%d,%s\n' % (trip_id,vtype))
+                
+                for a, b in zip(self.n[:-1], self.n[1:]):
+                    if not isinstance(a, Node) or not isinstance(b, Node):
+                        ex = "Not all nodes in line %s are type Node" % self.name
+                        WranglerLogger.debug(ex)
+                        raise NetworkException(ex)
+                    else:
+                        a_node, b_node = abs(int(a.num)), abs(int(b.num))
+                        ab_link = self.links[(a_node,b_node)]
+                        ##try:
+                        traveltime = float(ab_link['BUSTIME_%s' % tp])
+                        
+                        ##except:
+                        ##    WranglerLogger.warn("LINE %s, LINK %s: NO BUSTIME FOUND FOR TP %s" % (self.name, ab_link.id, tp))
+                        rest_time = 0
+                        if a.isStop():
+                            f_stoptimes.write('%d,%s,%s,%d,%d\n' % (trip_id, stop_time_hhmmss, stop_time_hhmmss, a_node, seq))
+                            f_stoptimes_ft.write('%d,%d\n' % (trip_id, a_node))
+                            seq += 1
+
+                        cum_time += traveltime
+                        stop_time = departure + cum_time
+                        stop_time_hhmmss = minutesPastMidnightToHHMMSS(stop_time, sep=':')
+
+                departure += headway
+                f_stoptimes.write('%d,%s,%s,%d,%d\n' % (trip_id, stop_time_hhmmss, stop_time_hhmmss, b_node, seq))
+                f_stoptimes_ft.write('%d,%d\n' % (trip_id, b_node))
 
     def writeFastTrips_Shape(self, f, writeHeaders=False):
         '''
@@ -1032,7 +1052,7 @@ class FastTripsTransitLine(TransitLine):
         cum_dist = 0
         track_dist = True
         seq = 1
-        if writeHeaders: f.write('shape_id,shape_pt_lat,shape_pt_long,shape_pt_sequence,shape_dist_traveled\n')
+        if writeHeaders: f.write('shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n')
         
         for a, b in zip(self.n[:-1],self.n[1:]):
             if not isinstance(a, Node) or not isinstance(b, Node):
@@ -1047,14 +1067,9 @@ class FastTripsTransitLine(TransitLine):
         # write the last node
         f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].stop_lat, self.n[-1].stop_lon, seq, cum_dist))
 
-    def addFares(self, od_fares=None, xf_fares=None, farelinks_fares=None):
+    def addFares(self, od_fares=None, xf_fares=None, farelinks_fares=None, price_conversion=1):
         TransitLine.addFares(self, od_fares,xf_fares,farelinks_fares)
-        self.fasttrips_fares = self.getFastTripsFares_asList()
-
-    def addFastTripsFares(self, fasttrips_fares):
-        self.fasttrips_fares = []
-        for fare in fasttrips_fares:
-            pass
+        self.fasttrips_fares = self.getFastTripsFares_asList(price_conversion=price_conversion)
         
     def asList(self, columns=None):
         data = []
