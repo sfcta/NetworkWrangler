@@ -33,6 +33,8 @@ class Supplink(dict):
         self.Anode = None
         self.Bnode = None
         self.mode  = None
+        self.support_flag = False
+        
         if template:
             self._applyTemplate(template)
 
@@ -65,6 +67,9 @@ class Supplink(dict):
         nodeList=self.id.split('-')
         self.Anode = int(nodeList[0])
         self.Bnode = int(nodeList[1])
+
+    def setSupportFlag(self, flag=True):
+        self.support_flag = flag
         
     def setMode(self, newmode=None):
         """
@@ -160,7 +165,7 @@ class FastTripsWalkSupplink(Supplink):
         self.taz = self.Anode
         self.stop_id = self.Bnode
         self.dist = None
-
+        
         # walk_access optional
         if walkskims and nodeToTaz and maxTaz:
             self.setAttributes(walkskims,nodeToTaz,maxTaz)
@@ -170,7 +175,7 @@ class FastTripsWalkSupplink(Supplink):
             self.retail_density = None
             self.auto_capacity = None
             self.indirectness = None
-
+        
     def asDataFrame(self, columns=None):
         if columns is None:
             columns = ['taz','stop_id','dist','elevation_gain','population_density',
@@ -230,12 +235,12 @@ class FastTripsDriveSupplink(Supplink):
         self.travel_time = None # float, minutes
         self.start_time = None  # hhmmss or blank
         self.end_time = None    # hhmmss or blank
-
+        
         if hwyskims and tp and pnrNodeToTaz:
             self.getSupplinkAttributes(hwyskims, pnrNodeToTaz, tp)
         elif tp:
             setStartTimeEndTimeFromTimePeriod(tp)
-
+        
     def setDirection(self):
         if self.isDriveAccess():
             self.direction = 'access' # 'access' or 'egress'

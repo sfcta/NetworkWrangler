@@ -826,10 +826,11 @@ class TransitNetwork(Network):
                     elif supplink.isWalkFunnel():
                         for k, s in self.fasttrips_walk_supplinks.iteritems():
                             if k[1] == supplink.Anode:
+                                s.setSupportFlag(True)
                                 ftsupp = copy.deepcopy(s)
                                 ftsupp.Bnode = supplink.Bnode
                                 ftsupp.stop_id = supplink.Bnode
-                                break
+                                ftsupp.setSupportFlag(False)
                         if ftsupp:
                             if (ftsupp.Anode,ftsupp.Bnode) in self.fasttrips_walk_supplinks.keys():
                                 WranglerLogger.warn("(%d-(%d)-%d) already exists in walk_access_supplinks" % (ftsupp.Anode,supplink.Anode,ftsupp.Bnode))
@@ -996,22 +997,6 @@ class TransitNetwork(Network):
                 n = FastTripsNode(pnr_nodenum, coord_dict)
                 self.fasttrips_pnrs[pnr_nodenum] = n
         
-    '''
-    stops:      stop_id, stop_code*, stop_name, stop_desc*, stop_lat, stop_lon, zone_id*, location_type*,
-                parent_station*,stop_timezone*,stop_timezone*, wheelchair_boarding*
-    stops_ft:   stop_id, shelter*, lighting*, bike_parking*, bike_share_station*, seating*, platform_hight*,
-                level*, off_board_payment*
-    routes:     route_id, agency_id, route_short_name, route_long_name, route_desc*, route_type, route_url*,
-                route_color*, route_text_color*
-    route_ft:   route_id, mode, proof_of_payment
-    fare_rules: fare_id, route_id, origin_id, destination_id, contains_id
-    fare_rules_ft:
-                fare_id, fare_class, start_time, end_time
-    fare_transfer_rules:
-                from_fare_class, to_fare_class, is_flat_fee, transfer_rule
-    fare_attributes.txt:
-                fare_id, price, currency_type, payment_method, transfers, transfer_duration
-    '''
     def createFastTrips_Agencies(self):
         agency_data = []
         for line in self.lines:
@@ -1068,7 +1053,7 @@ class TransitNetwork(Network):
         df_agency = pd.DataFrame(columns=['agency_id','agency_name','agency_url','agency_timezone'],data=self.fasttrips_agencies.values())
         df_agency.to_csv(os.path.join(path,f),index=False,headers=writeHeaders)
 
-    def writeFastTrips_PNRs(self, f='pnr.txt', path='.', writeHeaders=True):
+    def writeFastTrips_PNRs(self, f='drive_access_points_ft.txt', path='.', writeHeaders=True):
         df_pnrs = None
         pnr_data = []
         for pnr in self.fasttrips_pnrs.values():
@@ -1079,7 +1064,7 @@ class TransitNetwork(Network):
         df_pnrs = df_pnrs.drop_duplicates()
         df_pnrs.to_csv(os.path.join(path, f),index=False, headers=['lot_id','lot_lat','lot_lon'])
         
-    def writeFastTrips_Vehicles(self, f='vehicles.txt', path='.', writeHeaders=True):
+    def writeFastTrips_Vehicles(self, f='vehicles_ft.txt', path='.', writeHeaders=True):
         vehicles = []
         df_vehicles = None
         for line in self.lines:
@@ -1097,7 +1082,7 @@ class TransitNetwork(Network):
                     vehicles.append(vtype)
         df_vehicles.to_csv(os.path.join(path,f),index=False,headers=writeHeaders)
 
-    def writeFastTrips_Access(self, f_walk='walk_access.txt', f_drive='drive_access.txt', f_transfer='transfers.txt', f_transfer_ft='transfers_ft.txt', path='.', writeHeaders=True):
+    def writeFastTrips_Access(self, f_walk='walk_access_ft.txt', f_drive='drive_access_ft.txt', f_transfer='transfers.txt', f_transfer_ft='transfers_ft.txt', path='.', writeHeaders=True):
         df_walk = None
         df_drive = None
         df_transfer = None
@@ -1111,6 +1096,7 @@ class TransitNetwork(Network):
         transfer_ft_columns = ['dist','from_route_id','to_route_id','schedule_precedence']
         
         for supplink in self.fasttrips_walk_supplinks.values():
+            if supplink.support_flag: continue
             try:
                 slist = supplink.asList(walk_columns)
                 walk_data.append(slist)
@@ -1118,6 +1104,7 @@ class TransitNetwork(Network):
                 WranglerLogger.warn(str(e))
 
         for supplink in self.fasttrips_drive_supplinks.values():
+            if supplink.support_flag: continue
             try:
                 slist = supplink.asList(drive_columns)
                 drive_data.append(slist)
@@ -1125,6 +1112,7 @@ class TransitNetwork(Network):
                 WranglerLogger.warn(str(e))
 
         for supplink in self.fasttrips_transfer_supplinks.values():
+            if supplink.support_flag: continue
             try:
                 transfer_data.append(supplink.asList(transfer_keys+transfer_columns+transfer_ft_columns))
             except Exception as e:
