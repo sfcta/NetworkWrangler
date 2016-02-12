@@ -173,6 +173,7 @@ class FastTripsWalkSupplink(Supplink):
             self.elevation_gain = None
             self.population_density = None
             self.retail_density = None
+            self.employment_density = None
             self.auto_capacity = None
             self.indirectness = None
         
@@ -239,7 +240,7 @@ class FastTripsDriveSupplink(Supplink):
         if hwyskims and tp and pnrNodeToTaz:
             self.getSupplinkAttributes(hwyskims, pnrNodeToTaz, tp)
         elif tp:
-            setStartTimeEndTimeFromTimePeriod(tp)
+            self.setStartTimeEndTimeFromTimePeriod(tp)
         
     def setDirection(self):
         if self.isDriveAccess():
