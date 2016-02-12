@@ -1,0 +1,7 @@
+from_fare_class,to_fare_class,is_flat_fee,transfer_rule
+tntransit_local_bus_allday,tntransit_express_bus_allday,1,2.50
+tntransit_local_bus_allday,tntransit_heavy_rail_allday,1,3.50
+tntransit_express_bus_allday,tntransit_local_bus_allday,1,1.50
+tntransit_express_bus_allday,tntransit_heavy_rail_allday,1,3.50
+tntransit_heavy_rail_allday,tntransit_local_bus_allday,1,1.50
+tntransit_heavy_rail_allday,tntransit_express_bus_allday,1,2.50

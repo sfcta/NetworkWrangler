@@ -2,7 +2,20 @@ import copy,datetime,getopt,logging,os,shutil,sys,time
 import getopt
 from dbfpy import dbf
 sys.path.insert(0, os.path.join(os.path.dirname(__file__),".."))
-sys.path.append(r"Y:\champ\releases\5.0.0\lib")
+
+CUBE_FREEFLOW   = None
+HWY_LOADED      = None
+TRN_SUPPLINKS   = None      # transit[tod].lin with dwell times, xfer_supplinks, and walk_drive_access:
+TRN_BASE        = None      # .link (off-street link) and fares:
+TRANSIT_CAPACITY_DIR = None
+FT_OUTPATH      = None
+CHAMP_NODE_NAMES = None
+MODEL_RUN_DIR   = None      # for hwy and walk skims
+OVERRIDE_DIR    = None
+PSUEDO_RANDOM_DEPARTURE_TIMES = None
+CHAMP_DIR       = None
+DEPARTURE_TIMES_OFFSET = None
+SORT_OUTPUTS    = False
 
 USAGE = """
 
@@ -23,20 +36,6 @@ USAGE = """
 #              Define the following in an input configuration file            #
 #                                                                             #
 ###############################################################################
-
-CUBE_FREEFLOW   = None
-HWY_LOADED      = None
-TRN_LOADED      = None      # transit[tod].lin with dwell times, xfer_supplinks, and walk_drive_access:
-TRN_BASE        = None      # .link (off-street link) and fares:
-TRANSIT_CAPACITY_DIR = None
-FT_OUTPATH      = None
-CHAMP_NODE_NAMES = None
-MODEL_RUN_DIR   = None      # for hwy and walk skims
-NODEFILES       = None
-LINKFILES       = None
-OVERRIDE_DIR    = None
-PSUEDO_RANDOM_DEPARTURE_TIMES = None
-DEPARTURE_TIMES_OFFSET = None
 
 if __name__=='__main__':
     opts, args = getopt.getopt(sys.argv[1:],"s:h:f:v:t:")
@@ -65,11 +64,21 @@ if __name__=='__main__':
 
     execfile(config_file)
 
+    if CHAMP_DIR:
+        sys.path.append(CHAMP_DIR)
     if OVERRIDE_DIR:
-        sys.path.insert(0,r"Q:\Model Development\SHRP2-fasttrips\Task2\CHAMP_test_network_v3\wrangler_overrides")
-        # use Wrangler from the same directory as this build script
+        sys.path.insert(0,OVERRIDE_DIR)
+
     import Wrangler
     from Wrangler.Logger import WranglerLogger
+
+    # set up logging    
+    NOW = time.strftime("%Y%b%d.%H%M%S")
+    FT_OUTPATH = os.path.join(FT_OUTPATH,NOW)    
+    if not os.path.exists(FT_OUTPATH): os.mkdir(FT_OUTPATH)                         
+    LOG_FILENAME = os.path.join(FT_OUTPATH,"convert_cube_to_fasttrips_%s.info.LOG" % NOW)
+    Wrangler.setupLogging(LOG_FILENAME, LOG_FILENAME.replace("info", "debug"))
+
     from Wrangler.TransitNetwork import TransitNetwork
     from Wrangler.TransitLink import TransitLink
     from Wrangler.TransitLine import TransitLine
@@ -79,14 +88,17 @@ if __name__=='__main__':
     from Wrangler.WranglerLookups import *
     from Wrangler.NetworkException import NetworkException
     from _static.Cube import CubeNet
-    from SkimUtil import Skim, HighwaySkim, WalkSkim
-    
-    # set up logging    
-    NOW = time.strftime("%Y%b%d.%H%M%S")
-    FT_OUTPATH = os.path.join(FT_OUTPATH,NOW)    
-    if not os.path.exists(FT_OUTPATH): os.mkdir(FT_OUTPATH)                         
-    LOG_FILENAME = os.path.join(FT_OUTPATH,"convert_cube_to_fasttrips_%s.info.LOG" % NOW)
-    Wrangler.setupLogging(LOG_FILENAME, LOG_FILENAME.replace("info", "debug"))
+    try:
+        from SkimUtil import Skim, HighwaySkim, WalkSkim
+    except:
+        WranglerLogger.debug("Cannot find SkimUtil. NetworkWrangler will not be able to access skim attributes for access links. Continue anyway? (y/n)")
+        response = raw_input()
+        WranglerLogger.debug('Response: %s' % response)
+        if response.lower() not in ['y','yes','affirmative']:
+            WranglerLogger.debug('Quitting.')
+            sys.exit(2)
+        WranglerLogger.debug('Continuing...')
+
     os.environ['CHAMP_NODE_NAMES'] = CHAMP_NODE_NAMES
     
     try:
@@ -135,41 +147,66 @@ if __name__=='__main__':
         transit_network.addTravelTimes(highway_networks)
         WranglerLogger.debug("add pnrs")
         transit_network.createFastTrips_PNRs(nodes_dict)
-            
+
+    if do_supplinks and not TRN_SUPPLINKS:
+        do_supplinks = False
+        WranglerLogger.warn("Supplinks directory not defined (TRN_SUPPLINKS).  Skipping access and transfer links.")
+        
     if do_supplinks:
+        #a lot of this stuff requires a model run directory with skims, and SkimUtils, so need to do some checks to make sure these are avaiable.
         WranglerLogger.debug("Merging supplinks.")
-        transit_network.mergeSupplinks(TRN_LOADED)
+        transit_network.mergeSupplinks(TRN_SUPPLINKS)
         WranglerLogger.debug("\tsetting up walk skims for access links.")
-        walkskim = WalkSkim(file_dir = MODEL_RUN_DIR)
-        nodeToTazFile = os.path.join(MODEL_RUN_DIR,"nodesToTaz.dbf")
-        nodesdbf      = dbf.Dbf(nodeToTazFile, readOnly=True, new=False)
-        nodeToTaz     = {}
-        maxTAZ        = 0
-        for rec in nodesdbf:
-            nodeToTaz[rec["N"]] = rec["TAZ"]
-            maxTAZ = max(maxTAZ, rec["TAZ"])
-        nodesdbf.close()
+
+        # try to get walk skims
+        try:
+            walkskim = WalkSkim(file_dir = MODEL_RUN_DIR)
+        except:
+            WranglerLogger.debug("WalkSkim module or MODEL_RUN_DIR not available.  Skipping WalkSkims.  Some walk access link attributes will be blank.")
+            walkskim = None
+
+        # try to get node to taz correspondence
+        try:
+            nodeToTazFile = os.path.join(MODEL_RUN_DIR,"nodesToTaz.dbf")
+            nodesdbf      = dbf.Dbf(nodeToTazFile, readOnly=True, new=False)
+            nodeToTaz     = {}
+            maxTAZ        = 0
+            for rec in nodesdbf:
+                nodeToTaz[rec["N"]] = rec["TAZ"]
+                maxTAZ = max(maxTAZ, rec["TAZ"])
+            nodesdbf.close()
+        except:
+            WranglerLogger.debug("nodesToTaz.dbf not found.  MODEL_RUN_DIR may be missing or unavailable.")
+            nodeToTaz = None
+            maxTAZ = None
 
         WranglerLogger.debug("\tsetting up highway skims for access links.")
         hwyskims = {}
-        for tpnum,tpstr in Skim.TIMEPERIOD_NUM_TO_STR.items():
-            hwyskims[tpnum] = HighwaySkim(file_dir=MODEL_RUN_DIR, timeperiod=tpstr) 
-        pnrTAZtoNode = {}
-        pnrZonesFile = os.path.join(MODEL_RUN_DIR,"PNR_ZONES.dbf")
-        if not os.path.exists(pnrZonesFile):
-            WranglerLogger.fatal("Couldn't open %s" % pnrZonesFile)
-            sys.exit(2)
-        indbf = dbf.Dbf(os.path.join(MODEL_RUN_DIR,"PNR_ZONES.dbf"), readOnly=True, new=False)
-        for rec in indbf:
-            pnrTAZtoNode[rec["PNRTAZ"]] = rec["PNRNODE"]
-        indbf.close()
-        pnrNodeToTAZ = dict((v,k) for k,v in pnrTAZtoNode.iteritems())
-        # print self.pnrTAZtoNode
         
-        maxRealTAZ = min(pnrTAZtoNode.keys())-1
+        try:
+            for tpnum,tpstr in Skim.TIMEPERIOD_NUM_TO_STR.items():
+                hwyskims[tpnum] = HighwaySkim(file_dir=MODEL_RUN_DIR, timeperiod=tpstr)
+        except:
+            WranglerLogger.debug("HighwaySkim module or MODEL_RUN_DIR not available.  Skipping HighwaySkims.  Some walk access link attributes will be blank.")
+            hwyskims = None
+            
+        pnrTAZtoNode = {}
+
+        try:
+            pnrZonesFile = os.path.join(MODEL_RUN_DIR,"PNR_ZONES.dbf")
+            indbf = dbf.Dbf(os.path.join(MODEL_RUN_DIR,"PNR_ZONES.dbf"), readOnly=True, new=False)
+            for rec in indbf:
+                pnrTAZtoNode[rec["PNRTAZ"]] = rec["PNRNODE"]
+            indbf.close()
+            pnrNodeToTAZ = dict((v,k) for k,v in pnrTAZtoNode.iteritems())
+            #maxRealTAZ = min(pnrTAZtoNode.keys())-1
+        except:
+            WranglerLogger.debug("PNR_ZONES.dbf not found.  MODEL_RUN_DIR may be missing or unavailable.")
+            pnrNodeToTAZ = None
+        
         WranglerLogger.debug("\tconverting supplinks to fasttrips format.")
         transit_network.getFastTripsSupplinks(walkskim,nodeToTaz,maxTAZ,hwyskims,pnrNodeToTAZ)
-
+        
     if do_fares:
         WranglerLogger.debug("Making FarelinksFares unique")
         transit_network.makeFarelinksUnique()
@@ -200,7 +237,7 @@ if __name__=='__main__':
     transit_network.writeFastTrips_Trips(path=FT_OUTPATH)
     if do_fares:
         WranglerLogger.debug("writing fares")
-        transit_network.writeFastTrips_Fares(path=FT_OUTPATH)
+        transit_network.writeFastTrips_Fares(path=FT_OUTPATH, sortFareRules=SORT_OUTPUTS)
     WranglerLogger.debug("writing stops")
     transit_network.createFastTrips_Nodes()
     transit_network.writeFastTrips_Stops(path=FT_OUTPATH)

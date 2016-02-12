@@ -1471,7 +1471,7 @@ class TransitNetwork(Network):
     def writeFastTrips_Fares(self,f_farerules='fare_rules.txt',f_farerules_ft='fare_rules_ft.txt',
                              f_fareattr='fare_attributes.txt',f_fareattr_ft='fare_attributes_ft.txt',
                              f_faretransferrules='fare_transfer_rules.txt',
-                             path='.', writeHeaders=True):
+                             path='.', writeHeaders=True, sortFareRules=False):
         df_farerules    = None
         df_farerules_ft = None
         df_fareattrs    = None
@@ -1499,21 +1499,30 @@ class TransitNetwork(Network):
                 df_fareattrs_ft = df_row
             else:
                 df_fareattrs_ft = df_fareattrs_ft.append(df_row)
-        
-        df_farerules = df_farerules.drop_duplicates()#.sort(['fare_id','route_id'])
-        df_farerules_ft = df_farerules_ft.drop_duplicates()#.sort('fare_id')
-        df_fareattrs = df_fareattrs.drop_duplicates()#.sort('fare_id')
+
+        if sortFareRules:
+            df_farerules = df_farerules.drop_duplicates().sort(['fare_id','route_id'])
+            df_farerules_ft = df_farerules_ft.drop_duplicates().sort('fare_id')
+            df_fareattrs = df_fareattrs.drop_duplicates().sort('fare_id')
+            df_fareattrs_ft = df_fareattrs_ft.drop_duplicates().sort('fare_class')
+        else:
+            df_farerules = df_farerules.drop_duplicates()
+            df_farerules_ft = df_farerules_ft.drop_duplicates()
+            df_fareattrs = df_fareattrs.drop_duplicates()
+            df_fareattrs_ft = df_fareattrs_ft.drop_duplicates()
+            
         df_farerules.to_csv(os.path.join(path, f_farerules),index=False,headers=writeHeaders)
         df_farerules_ft.to_csv(os.path.join(path,f_farerules_ft),index=False,headers=writeHeaders)
         df_fareattrs.to_csv(os.path.join(path,f_fareattr),index=False,header=writeHeaders,float_format='%.2f')
-        df_fareattrs_ft = df_fareattrs_ft.drop_duplicates()#.sort('fare_class')
         df_fareattrs_ft.to_csv(os.path.join(path, f_fareattr_ft),index=False,header=writeHeaders,float_format='%.2f')
 
         transfer_columns = ['from_fare_class','to_fare_class','is_flat_fee','transfer_rule']
         transfer_data = []
+        
         for fare in self.fasttrips_transfer_fares:
             data = fare.asList(columns=transfer_columns)
             transfer_data.append(data)
+            
         df_transfer_rules = pd.DataFrame(columns=transfer_columns, data=transfer_data)
         df_transfer_rules = df_transfer_rules.drop_duplicates()
         df_transfer_rules.to_csv(os.path.join(path,f_faretransferrules),index=False,header=writeHeaders,float_format='%.2f')
