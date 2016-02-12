@@ -52,3 +52,5 @@ coverage.xml
 # Sphinx documentation
 docs/_build/
 
+# outputs from test network builds
+unittests/test_cube_to_fasttrips_output/*
