@@ -1,0 +1,138 @@
+Page 1  (VOYAGER PILOT) 
+San Francisco County Transportation Authority
+---------------------------------------------
+PILOT (v.08/05/2014 [6.1.1]) Thu Feb 11 17:47:27 2016
+
+Args: Y:\Users\Drew\NetworkWrangler\_static\Cube\exportHwyfromPy.s
+Input:   Y:\Users\Drew\NetworkWrangler\_static\Cube\exportHwyfromPy.s
+
+RUN PGM=NETWORK,0
+
+PILOT Stack Size = 42 bytes.
+................................................................................
+Page 2  (VOYAGER NETWORK) 
+San Francisco County Transportation Authority
+---------------------------------------------
+NETWORK (v.08/05/2014 [6.1.1])  Thu Feb 11 17:47:27 2016
+
+
+NETI[1]="Y:\Users\Drew\NetworkWrangler\scripts\..\unittests\test_cube_to_fasttrips_input\LOADPM_XFERS.NET"
+LINKO="Y:\Users\Drew\NetworkWrangler\scripts\..\unittests\test_cube_to_fasttrips_output\2016Feb11.174727\loaded_highway_data\LOADPM_XFERS.csv",FORMAT=SDF,INCLUDE=A,B,DISTANCE,STREETNAME ,BUSTIME
+NODEO="Y:\Users\Drew\NetworkWrangler\scripts\..\unittests\test_cube_to_fasttrips_output\2016Feb11.174727\loaded_highway_data\LOADPM_XFERS_nodes.csv",FORMAT=SDF,INCLUDE=N,X,Y  
+
+
+NETWORK Stack Size = 638 bytes.
+................................................................................
+
+
+
+
+LOADPM_XFERS.NET   (VOYAGER):
+
+NET PGM=CUBE   DATE=Wed Jan 20 10:56:15 2016
+ID= 
+PAR Zones=67    Nodes=201   Links=496    NodeRecs=156  
+NVR 7    N    X    Y    DTA_EDIT_FLAG    MULTI_NODE_SGNL    SUB_TYPE
+    OLD_NODE
+LVR 50    A    B    TOLL    USE    CAP    AT    FT    STREETNAME=16
+    TYPE=4    MTYPE=2    SPEED    DISTANCE    TIME    LANE_AM    LANE_OP
+    LANE_PM    BUSLANE_AM    BUSLANE_OP    BUSLANE_PM    TOLLAM_DA
+    TOLLAM_SR2    TOLLAM_SR3    TOLLPM_DA    TOLLPM_SR2    TOLLPM_SR3
+    TOLLEA_DA    TOLLEA_SR2    TOLLEA_SR3    TOLLMD_DA    TOLLMD_SR2
+    TOLLMD_SR3    TOLLEV_DA    TOLLEV_SR2    TOLLEV_SR3    VALUETOLL_FLAG
+    PASSTHRU    BUSTPS_AM    BUSTPS_OP    BUSTPS_PM    TSVA    TSIN=1
+    BIKE_CLASS    PER_RISE    ONEWAY    PROJ=1    DTA_EDIT_FLAG    TOLLTIME
+    PHASE    ACTION=1    BUSTIME
+
+
+
+Begin PROCESS PHASE NODEMERGE
+         156 records merged from NODEI[1]: LOADPM_XFERS.NET
+         156 data base records.
+
+Variable  Obs<>0           Total           Ave           Min           Max           RMS  
+--------  ------           -----           ---           ---           ---           ---  
+N            156              --            --          1           201               --
+X            156  934,509,119.67  5,990,443.07  5,987,472.06  5,993,107.49  5,990,443.27
+Y            156  329,699,115.8   2,113,455.87  2,111,256.71  2,120,658.58  2,113,456.34
+SUB_TYPE     104          230             2.21          1             3             2.31
+OLD_NODE     150    4,010,928        26,739.52        280        54,070        29,807.26
+
+      Obs = 0:  DTA_EDIT_FLAG  MULTI_NODE_SGNL
+
+_Variables with values:
+
+_ZONES               67      
+
+End   PROCESS PHASE NODEMERGEPage 3  (VOYAGER NETWORK) 
+San Francisco County Transportation Authority
+---------------------------------------------
+
+
+Begin PROCESS PHASE LINKMERGE
+         496 records merged from NETI[1]: LOADPM_XFERS.NET
+         496 data base records.
+
+Variable    Obs<>0       Total     Ave     Min       Max       RMS  
+--------    ------       -----     ---     ---       ---       ---  
+A              496          --      --    1       179           --
+B              496          --      --    1       179           --
+USE            496      496       1       1         1         1   
+CAP            496  447,700     902.62  300     2,000     1,154.94
+AT             496    1,342       2.71    2         3         2.74
+FT             496    4,418       8.91    3        12         9.28
+STREETNAME     356                      (10TH    )  (TACOMA  )
+TYPE           354                      (AVE     )  (ST      )
+MTYPE          496                      (SF      )  (SF      )
+SPEED          496   12,470      25.14   10        60        26.99
+DISTANCE       496       46.44    0.09    0         1.16      0.12
+TIME           496      143.05    0.29    0.01      1.16      0.37
+LANE_AM        496    1,424       2.87    1         7         3.9 
+LANE_OP        496    1,424       2.87    1         7         3.9 
+LANE_PM        496    1,424       2.87    1         7         3.9 
+TSVA           496   22,421.2    45.2    15       107.83     60.04
+TSIN           496                      (F       )  (T       )
+BIKE_CLASS      58      138       2.38    2         3         2.43
+PER_RISE       146       -0      -0      -0.51      0.51      0.07
+BUSTIME        496      502       1.01    1         1.5       1.01
+
+      Obs = 0:  TOLL  BUSLANE_AM  BUSLANE_OP  BUSLANE_PM  TOLLAM_DA
+      Obs = 0:  TOLLAM_SR2  TOLLAM_SR3  TOLLPM_DA  TOLLPM_SR2  TOLLPM_SR3
+      Obs = 0:  TOLLEA_DA  TOLLEA_SR2  TOLLEA_SR3  TOLLMD_DA  TOLLMD_SR2
+      Obs = 0:  TOLLMD_SR3  TOLLEV_DA  TOLLEV_SR2  TOLLEV_SR3
+      Obs = 0:  VALUETOLL_FLAG  PASSTHRU  BUSTPS_AM  BUSTPS_OP  BUSTPS_PM
+      Obs = 0:  ONEWAY  PROJ  DTA_EDIT_FLAG  TOLLTIME  PHASE  ACTION
+
+_Variables with values:
+
+_ZONES               67      
+
+End   PROCESS PHASE LINKMERGE
+
+M(664): Unconnected Zones:  66<-  67->
+
+
+Begin PROCESS PHASE NET2ASC
+
+Variables written to Y:\Users\Drew\NetworkWrangler\unittests\test_cube_to_fasttrips_output\2016Feb11.174727\loaded_highway_data\LOADPM_XFERS.csv:
+     A                   3.0
+     B                   3.0
+     DISTANCE            7.5
+     STREETNAME         16.0
+     BUSTIME             4.2
+ Page 4  (VOYAGER NETWORK) 
+San Francisco County Transportation Authority
+---------------------------------------------
+
+Variables written to Y:\Users\Drew\NetworkWrangler\unittests\test_cube_to_fasttrips_output\2016Feb11.174727\loaded_highway_data\LOADPM_XFERS_nodes.csv:
+     N                   3.0
+     X                  13.5
+     Y                  13.5
+ 
+End   PROCESS PHASE NET2ASC
+
+NETWORK  ReturnCode = 0  Elapsed Time = 00:00:01
+################################################################################
+
+
+VOYAGER  ReturnCode = 0  Elapsed Time = 00:00:01

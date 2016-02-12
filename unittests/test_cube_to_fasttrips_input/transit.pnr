@@ -1,0 +1,5 @@
+
+; Parking charges $1.00 (01) = $0.70 (90)
+
+PNR NODE=200 ZONES=5-7 COST=0.28; Parking P1
+PNR NODE=201 ZONES=10 COST=0.28; Parking P2

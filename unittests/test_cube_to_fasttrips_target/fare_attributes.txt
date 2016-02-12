@@ -1,0 +1,4 @@
+fare_id,price,currency_type,payment_method,transfers,transfer_duration
+tntransit_express_bus,3.00,USD,0,,
+tntransit_heavy_rail,4.00,USD,1,,
+tntransit_local_bus,2.00,USD,0,,
