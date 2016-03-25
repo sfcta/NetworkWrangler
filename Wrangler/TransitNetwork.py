@@ -952,6 +952,15 @@ class TransitNetwork(Network):
             for k, v in coord_dict.iteritems():
                 self.coord_dict[k] = v
 
+    def addDepartureTimesFromHeadways(self, psuedo_random=True, offset=0):
+        for line in self.lines:
+            if isinstance(line, str):
+                pass
+            elif isinstance(line, TransitLine):
+                line.setDeparturesFromHeadways(psuedo_random, offset)
+            else:
+                raise NetworkException('Unhandled data type %s in self.lines' % type(line))
+
     def addFirstDeparturesToAllLines(self, psuedo_random=True, offset=0):
         '''
         This is a function added for fast-trips.
@@ -965,7 +974,24 @@ class TransitNetwork(Network):
                 line.setFirstDepartures(psuedo_random=psuedo_random, offset=offset)
             else:
                 raise NetworkException('Unhandled data type %s in self.lines' % type(line))
-        
+
+    def addDepartureTimesFromGTFS(self, gtfs_path, crosswalk):
+        import gtfs_utils
+        gtfs = gtfs_utils.GTFSFeed(gtfs_path)
+        gtfs.load()
+        gtfs.build_common_dfs()
+        crosswalk = pd.read_csv(crosswalk)
+        for line in self.lines:
+            if isinstance(line, str):
+                pass
+            elif isinstance(line, TransitLine):
+                list_of_pattern_ids = crosswalk[crosswalk['CHAMP ROUTE ID']==line.name]['pattern_id'].drop_duplicates().tolist()
+                list_of_departure_times = gtfs.route_trips[gtfs.route_trips['pattern_id'].isin(list_of_pattern_ids)]['trip_departure_mpm'].tolist()
+                if len(recs) == 0:
+                    WranglerLogger.warn("No GTFS departure times for ROUTE ID %s, calculating from headways" % line.name)
+                    addDeparturesToAllLines()
+                else:
+                    line.setDepartures(list_of_departure_times)
     def addTravelTimes(self, highway_networks):
         '''
         This is a function added for fast-trips.
@@ -1331,7 +1357,7 @@ class TransitNetwork(Network):
         
         for nodes in zone_list:
             id = id_generator.next()
-            id = int(id)
+            id = str(id)
             zone_to_nodes[id] = nodes
             for n in nodes:
                 if n not in found_nodes: found_nodes.append(n)
@@ -1438,11 +1464,6 @@ class TransitNetwork(Network):
                         count += 1
                         if count % 10000 == 0: WranglerLogger.debug("%7d" % count)
         return fasttrips_fares, self.fasttrips_transfer_fares
-                
-    def writeFastTripsFares_dumb(self,f='dumbstops.txt',path='.'):
-        f = openFileOrString(os.path.join(path,f))
-        for rule in self.fasttrips_fares:
-            f.write('%s\n' % str(rule))
 
     def createFastTrips_Nodes(self):
         '''

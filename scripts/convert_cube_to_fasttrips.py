@@ -2,7 +2,7 @@ import copy,datetime,getopt,logging,os,shutil,sys,time
 import getopt
 from dbfpy import dbf
 sys.path.insert(0, os.path.join(os.path.dirname(__file__),".."))
-
+sys.path.insert(0, r'Y:\champ\util\pythonlib-migration\master_versions\gtfs_utils')
 CUBE_FREEFLOW   = None
 HWY_LOADED      = None
 TRN_SUPPLINKS   = None      # transit[tod].lin with dwell times, xfer_supplinks, and walk_drive_access:
@@ -16,6 +16,7 @@ PSUEDO_RANDOM_DEPARTURE_TIMES = None
 CHAMP_DIR       = None
 DEPARTURE_TIMES_OFFSET = None
 SORT_OUTPUTS    = False
+REAL_GTFS       = None
 
 USAGE = """
 
@@ -220,7 +221,10 @@ if __name__=='__main__':
         transit_network.createFastTrips_Fares(price_conversion=0.01)
         
     WranglerLogger.debug("adding first departure times to all lines")
-    transit_network.addFirstDeparturesToAllLines(psuedo_random=PSUEDO_RANDOM_DEPARTURE_TIMES, offset=DEPARTURE_TIMES_OFFSET)
+    if not REAL_GTFS:
+        transit_network.addDepartureTimesFromHeadways(psuedo_random=PSUEDO_RANDOM_DEPARTURE_TIMES, offset=DEPARTURE_TIMES_OFFSET)
+    else:
+        transit_network.addDepartureTimesFromGTFS(gtfs[0], crosswalk)
     
     WranglerLogger.debug("writing agencies")
     transit_network.writeFastTrips_Agencies(path=FT_OUTPATH)
