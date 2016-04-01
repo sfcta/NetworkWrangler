@@ -17,6 +17,7 @@ CHAMP_DIR       = None
 DEPARTURE_TIMES_OFFSET = None
 SORT_OUTPUTS    = False
 REAL_GTFS       = None
+CROSSWALK       = None
 
 USAGE = """
 
@@ -220,11 +221,12 @@ if __name__=='__main__':
         transit_network.addFaresToLines()
         transit_network.createFastTrips_Fares(price_conversion=0.01)
         
-    WranglerLogger.debug("adding first departure times to all lines")
+    WranglerLogger.debug("adding departure times to all lines")
     if not REAL_GTFS:
-        transit_network.addDepartureTimesFromHeadways(psuedo_random=PSUEDO_RANDOM_DEPARTURE_TIMES, offset=DEPARTURE_TIMES_OFFSET)
+        transit_network.addDeparturesFromHeadways(psuedo_random=PSUEDO_RANDOM_DEPARTURE_TIMES, offset=DEPARTURE_TIMES_OFFSET)
     else:
-        transit_network.addDepartureTimesFromGTFS(gtfs[0], crosswalk)
+        for gtfs in REAL_GTFS:
+            transit_network.addDeparturesFromGTFS(gtfs, CROSSWALK)
     
     WranglerLogger.debug("writing agencies")
     transit_network.writeFastTrips_Agencies(path=FT_OUTPATH)

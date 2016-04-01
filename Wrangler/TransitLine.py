@@ -847,10 +847,11 @@ class FastTripsTransitLine(TransitLine):
             while departure < tp_end:
                 self.all_departure_times.append(departure)
                 departure += headway
+            #TO-DO: if next period headway >= this period headway, schedule one more trip at current headway to avoid extra-large gap
         return self.all_departure_times
-    
-    def setDepartures(list_of_departure_times):
-        for i, time in izip(range(len(list_of_departure_times)), list_of_departure_times):
+
+    def setDepartures(self, list_of_departure_times):
+        for i, time in itertools.izip(range(len(list_of_departure_times)), list_of_departure_times):
             if isinstance(time, str):
                 list_of_departure_times[i] = HHMMSS_to_MinutesPastMidnight(time)
         self.all_departure_times = list_of_departure_times
@@ -904,21 +905,6 @@ class FastTripsTransitLine(TransitLine):
             start_time = random.lognormvariate(mean, sd)
         start_time = start_time + time_period_start 
         return start_time
-
-##    def scheduleFastTrips_Trips(self, id_generator, default_dwell_time=0):
-##        for tp in WranglerLookups.ALL_TIMEPERIODS:
-##            headway = self.getFreq(tp)
-##            if not headway > 0:
-##                continue
-##
-##            trip_departure = self.otherattr['DEPT_%s' % tp]
-##            tp_end = WranglerLookups.MINUTES_PAST_MIDNIGHT[tp] + WranglerLookups.HOURS_PER_TIMEPERIOD[tp] * 60
-##            while trip_departure < tp_end:
-##                cum_time = 0
-##                stop_time = departure + cum_time
-##                stop_time_hhmmss = minutesPastMidnightToHHMMSS(stop_time)
-##                seq = 1
-##                trip_id = id_generator.next()
 
     # ** FARE FUNCTIONS **
     def getFastTripsFares_asList(self, zone_suffixes=False, price_conversion=1):
@@ -1002,6 +988,7 @@ class FastTripsTransitLine(TransitLine):
             rules.append(rule)
                 
         return rules
+    
     # ** FAST-TRIP FILE WRITING FUNCTIONS **
     def writeFastTrips_Trips(self, f_trips, f_trips_ft, f_stoptimes, f_stoptimes_ft, id_generator, writeHeaders=False):
         '''

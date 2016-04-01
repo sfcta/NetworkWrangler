@@ -952,7 +952,7 @@ class TransitNetwork(Network):
             for k, v in coord_dict.iteritems():
                 self.coord_dict[k] = v
 
-    def addDepartureTimesFromHeadways(self, psuedo_random=True, offset=0):
+    def addDeparturesFromHeadways(self, psuedo_random=True, offset=0):
         for line in self.lines:
             if isinstance(line, str):
                 pass
@@ -975,23 +975,27 @@ class TransitNetwork(Network):
             else:
                 raise NetworkException('Unhandled data type %s in self.lines' % type(line))
 
-    def addDepartureTimesFromGTFS(self, gtfs_path, crosswalk):
+    def addDeparturesFromGTFS(self, gtfs_path, crosswalk):
         import gtfs_utils
         gtfs = gtfs_utils.GTFSFeed(gtfs_path)
         gtfs.load()
         gtfs.build_common_dfs()
         crosswalk = pd.read_csv(crosswalk)
+        gtfs.route_trips.to_csv('route_trips.csv')
+        
         for line in self.lines:
             if isinstance(line, str):
                 pass
             elif isinstance(line, TransitLine):
                 list_of_pattern_ids = crosswalk[crosswalk['CHAMP ROUTE ID']==line.name]['pattern_id'].drop_duplicates().tolist()
                 list_of_departure_times = gtfs.route_trips[gtfs.route_trips['pattern_id'].isin(list_of_pattern_ids)]['trip_departure_mpm'].tolist()
-                if len(recs) == 0:
-                    WranglerLogger.warn("No GTFS departure times for ROUTE ID %s, calculating from headways" % line.name)
-                    addDeparturesToAllLines()
+                if len(list_of_departure_times) == 0:
+                    WranglerLogger.warn("ROUTE ID %s: No GTFS departure times for, calculating from headways" % line.name)
+                    self.addDeparturesFromHeadways
                 else:
+                    WranglerLogger.debug("ROUTE ID %s: Setting departure times from GTFS" % line.name)
                     line.setDepartures(list_of_departure_times)
+                            
     def addTravelTimes(self, highway_networks):
         '''
         This is a function added for fast-trips.
