@@ -728,8 +728,8 @@ class FastTripsTransitLine(TransitLine):
     def __init__(self, name=None, template=None):
         TransitLine.__init__(self, name, template)
         # routes req'd
-        self.route_id = self.name       # keep the CHAMP name as the id
-        self.route_short_name = None
+        self.route_id = None
+        self.route_short_name = self.name
         self.route_long_name = None
         self.route_type = None
 
@@ -747,7 +747,17 @@ class FastTripsTransitLine(TransitLine):
         # routes_ft optional
         self.fare_class = None
 
-        self.setRouteNameAndAgency()
+        # trips req'd
+        self.service_id     = None
+        # info for crosswalk between SF-CHAMP and GTFS-PLUS
+        self.champ_direction_id = None
+        # info for crosswalk between agency published GTFS and GTFS-PLUS
+        self.gtfs_agency_id = None
+        self.gtfs_route_id  = None
+        self.gtfs_vintage   = None
+        self.gtfs_url       = None
+
+        self.setRouteInfoFromLineName()
         self.setRouteType()
         self.setMode()
         self.setProofOfPayment()
@@ -762,17 +772,49 @@ class FastTripsTransitLine(TransitLine):
             self.route_id = route_id
             return self.route_id
 
-    def setRouteNameAndAgency(self):
+    def setDirectionId(self, direction_id=0):
+        if direction_id in (0,1):
+            self.direction_id = direction_id
+        else:
+            raise NetworkException("direction_id must be 0 or 1.  passed %s" % str(direction_id))
+        return self.direction_id
+    
+    def setRouteInfoFromLineName(self):
+        '''
+        sets GTFS-PLUS, SF-CHAMP, and other information based on the linename_pattern
+        set agency_id, route_id, route_short_name, route_long_name, direction_id
+        agency_id: name of the agency, human-readable
+        route_id: since it has to be unique id, agency_id + route number / name / letter
+            this is for ease of compatibility with published gtfs
+        route_short_name: self.name by default
+            this is for ease of compatibility with SF-CHAMP
+        route_long_name: self.name by default, could be filled in with GTFS long name
+        direction_id: GTFS requires 0 or 1, but this info may not be known at the time
+        champ_direction_id: store SF-CHAMP direction indication to set GTFS-PLUS direction_id later
+            
+        '''
         m = Regexes.linename_pattern.match(self.name)
         if not m: raise NetworkException('Failed to match linename_pattern on %s' % self.name)
         self.agency_id = WranglerLookups.OPERATOR_ID_TO_NAME[m.groupdict()['operator']]
-        self.route_short_name = m.groupdict()['line']
+        self.service_id = self.agency_id+'_weekday'
+        self.route_id = '%s_%s' % (self.agency_id, m.groupdict()['line'])
+        self.route_short_name = self.name #m.groupdict()['line']
+        self.route_long_name = self.name
         if m.groupdict()['direction']:
-            self.route_long_name = '%s_%s' % (m.groupdict()['line'], m.groupdict()['direction'])
+            self.champ_direction_id = m.groupdict()['direction']
         else:
-            self.route_long_name = self.route_short_name
-        
+            self.champ_direction_id = None
+        if self.champ_direction_id == "I":
+            self.direction_id = 1
+        elif self.champ_direction_id == "O":
+            self.direction_id = 0
+        else:
+            self.direction_id = None
+
     def setRouteShortName(self, route_short_name=None):
+        '''
+        This will be the key that links fasttrips back to CHAMP
+        '''
         if route_short_name:
             self.route_short_name = route_short_name
             return self.route_short_name
@@ -790,7 +832,7 @@ class FastTripsTransitLine(TransitLine):
         else:
             self.route_long_name = m.groupdict()['line']
         return self.route_long_name
-    
+
     def setRouteType(self, route_type=None):
         if route_type:
             self.route_type = route_type
@@ -848,6 +890,11 @@ class FastTripsTransitLine(TransitLine):
                 self.all_departure_times.append(departure)
                 departure += headway
             #TO-DO: if next period headway >= this period headway, schedule one more trip at current headway to avoid extra-large gap
+            if len(self.all_departure_times) > 2000:
+                WranglerLogger.warn('%s: has %d departure times for tp: %s' % (self.name, len(self.all_departure_times), tp))        
+                #WranglerLogger.warn('%s, %s, %s, %s' % (self.all_departure_times[0], self.all_departure_times[1], self.all_departure_times[2], self.all_departure_times[3]))
+                WranglerLogger.warn('%s' % str(self.all_departure_times))
+                sys.exit()
         return self.all_departure_times
 
     def setDepartures(self, list_of_departure_times):
@@ -962,7 +1009,11 @@ class FastTripsTransitLine(TransitLine):
                             if type(destination_id) != int:
                                 raw_input('y/n')
                         modenum = int(self.attr['MODE'])
-                        rule = FastTripsFare(champ_line_name = self.name,champ_mode=modenum, price=price,origin_id=origin_id,destination_id=destination_id,zone_suffixes=zone_suffixes, price_conversion=price_conversion)
+                        rule = FastTripsFare(champ_line_name = self.name,champ_mode=modenum,
+                                             price=price,origin_id=origin_id,
+                                             destination_id=destination_id,
+                                             zone_suffixes=zone_suffixes,
+                                             price_conversion=price_conversion)
                     else:
                         continue
                     if rule == last_rule: continue
@@ -974,7 +1025,12 @@ class FastTripsTransitLine(TransitLine):
             for fare in self.od_fares:
                 if isinstance(fare, ODFare):
                     modenum = int(self.attr['MODE'])
-                    rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum,price=self.board_fare.price + fare.price,origin_id=fare.from_name,destination_id=fare.to_name,zone_suffixes=zone_suffixes, price_conversion=price_conversion)
+                    rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum,
+                                         price=self.board_fare.price + fare.price,
+                                         origin_id=fare.from_name,
+                                         destination_id=fare.to_name,
+                                         zone_suffixes=zone_suffixes,
+                                         price_conversion=price_conversion)
                     ##WranglerLogger.debug('%s' % str(rule))
                     if rule not in rules:
                         rules.append(rule)
@@ -984,7 +1040,12 @@ class FastTripsTransitLine(TransitLine):
             origin_id       = None
             destination_id  = None
             modenum = int(self.attr['MODE'])
-            rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum, price=self.board_fare.price,origin_id=origin_id,destination_id=destination_id,zone_suffixes=zone_suffixes, price_conversion=price_conversion)
+            rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum,
+                                 price=self.board_fare.price,
+                                 origin_id=origin_id,
+                                 destination_id=destination_id,
+                                 zone_suffixes=zone_suffixes,
+                                 price_conversion=price_conversion)
             rules.append(rule)
                 
         return rules
@@ -996,22 +1057,21 @@ class FastTripsTransitLine(TransitLine):
         Writes a header if writeHeaders = True
         '''
         if writeHeaders:
-            #f_trips.write('route_id,service_id,trip_id,shape_id\n')
-            f_trips.write('trip_id,route_id,service_id,shape_id\n')
+            f_trips.write('trip_id,route_id,service_id,shape_id,direction_id\n')
             f_trips_ft.write('trip_id,vehicle_name\n')
             f_stoptimes.write('trip_id,arrival_time,departure_time,stop_id,stop_sequence\n')
             f_stoptimes_ft.write('trip_id,stop_id\n')
-            #f_stoptimes_ft.write('trip_id,stop_id,pay_at_station,real_time_data,front_board_only,reliability,level_boarding\n')
 
         for departure in self.all_departure_times:
-            for tp, (start, stop) in WranglerLookups.TIMEPERIOD_TO_MPMRANGE.iteritems():
-                if departure >= start and departure < stop:
-                    break            
+##            for tp, (start, stop) in WranglerLookups.TIMEPERIOD_TO_MPMRANGE.iteritems():
+##                if departure >= start and departure < stop:
+##                    break            
             stop_time = departure
             stop_time_hhmmss = minutesPastMidnightToHHMMSS(stop_time, sep=':')
+            tp = HHMMSSToCHAMPTimePeriod(stop_time_hhmmss,sep=':')
             seq = 1
             trip_id = id_generator.next()
-            f_trips.write('%d,%s,%s,%s\n' % (trip_id,self.name,self.agency_id,self.name))
+            f_trips.write('%d,%s,%s,%s,%s\n' % (trip_id,self.route_id,self.service_id,self.name,self.direction_id if self.direction_id else ''))
 
             if tp in self.vehicle_types.keys():
                 vtype = self.vehicle_types[tp]
@@ -1071,7 +1131,7 @@ class FastTripsTransitLine(TransitLine):
     def addFares(self, od_fares=None, xf_fares=None, farelinks_fares=None, price_conversion=1):
         TransitLine.addFares(self, od_fares,xf_fares,farelinks_fares)
         self.fasttrips_fares = self.getFastTripsFares_asList(price_conversion=price_conversion)
-        
+    
     def asList(self, columns=None):
         data = []
         if columns is None:
@@ -1084,6 +1144,19 @@ class FastTripsTransitLine(TransitLine):
         import pandas as pd
         data = self.asList(columns=columns)
         df = pd.DataFrame(columns=columns,data=[data])
+        return df
+
+    def stopsAsDataFrame(self, route_cols=['route_id','route_short_name','direction_id'], stop_cols=['stop_id','stop_sequence','stop_lat','stop_lon','x','y']):
+        import pandas as pd
+        route_data = []
+        for col in route_cols:
+            route_data.append(getattr(self,col))
+        all_data = []
+        for n in self.n:
+            if n.isStop():
+                stop_data = n.asList(stop_cols)
+                all_data.append(route_data+stop_data)
+        df = pd.DataFrame(data=all_data, columns=route_cols+stop_cols)
         return df
     
     def _applyTemplate(self, template):
