@@ -189,6 +189,7 @@ class FastTripsNode(Node):
         # stops.txt req'd
         self.stop_id        = abs(int(n))
         self.stop_name      = Node.descriptions[self.stop_id] if self.stop_id in Node.descriptions.keys() else str(self.stop_id)
+        self.stop_sequence  = None
         if stop_lat and stop_lon:
             self.stop_lat = stop_lat
             self.stop_lon = stop_lon

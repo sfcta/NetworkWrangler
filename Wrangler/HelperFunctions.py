@@ -1,5 +1,5 @@
 # some generic helper functions for NetworkWrangler
-import copy, xlrd
+import copy, xlrd, re
 
 def openFileOrString(f):
     # check if it's a filename or a file. Open it if it's a filename
@@ -74,6 +74,15 @@ def removeDuplicatesFromList(l):
             this_list.remove(x)
     return this_list
 
+def getChampNodeNameDictFromFile(filename):
+    book = xlrd.open_workbook(filename)
+    sh = book.sheet_by_index(0)
+    nodeNames = {}
+    for rx in range(0,sh.nrows): # skip header
+        therow = sh.row(rx)
+        nodeNames[int(therow[0].value)] = therow[1].value
+    return nodeNames
+
 def minutesPastMidnightToHHMMSS(minutes, sep=None):
     if isinstance(minutes, float):
         seconds = minutes * 60
@@ -100,7 +109,7 @@ def secondsPastMidnightToHHMMSS(seconds, sep=None):
     if sep == None: sep = ''
     return hh+sep+mm+sep+ss
 
-def TimeStringToCHAMPTimePeriod(hhmmss, sep=None):
+def HHMMSSToCHAMPTimePeriod(hhmmss, sep=None):
         if hhmmss == None:
             tod = 'allday'
             return tod
@@ -132,14 +141,7 @@ def TimeStringToCHAMPTimePeriod(hhmmss, sep=None):
         else:
             new_hh = '%02d' % (int(hhmmss[:2]) - 24)
             new_hhmmss = new_hh + hhmmss[2:]
-            tod = convertStringToTimePeriod(new_hhmmss)
+            tod = HHMMSSToCHAMPTimePeriod(new_hhmmss)
         return tod
     
-def getChampNodeNameDictFromFile(filename):
-    book = xlrd.open_workbook(filename)
-    sh = book.sheet_by_index(0)
-    nodeNames = {}
-    for rx in range(0,sh.nrows): # skip header
-        therow = sh.row(rx)
-        nodeNames[int(therow[0].value)] = therow[1].value
-    return nodeNames
+
