@@ -1033,100 +1033,117 @@ class TransitNetwork(Network):
         p = Point(x,y)
         return p
         
-    def matchLinesToGTFS(self, gtfs_path, dist_threshold = 200, match_threshold=0.75, sort=True):
+    def matchLinesToGTFS(self, gtfs_agency=None, gtfs_path=None, gtfs_path_dict=None, dist_threshold = 200, match_threshold=0.75, sort=True):
         import gtfs_utils
         import pyproj
         import shapely
         from shapely.geometry import Point
-        
-        gtfs = gtfs_utils.GTFSFeed(gtfs_path)
-        gtfs.load()
-        gtfs.standardize()
-        gtfs.build_common_dfs()
-        gtfs_xwalk_cols = ['champ_line_name','route_id','route_short_name','direction_id','pattern_id','match']
-        gtfs_nodexwalk_cols = ['champ_line_name','champ_node_id','gtfs_stop_id','distance']
-        if self.gtfs_crosswalk == None:
-            self.gtfs_crosswalk = pd.DataFrame(columns=gtfs_xwalk_cols) # champ_line_name -> gtfsFeed route_id, direction_id, pattern_id
-        if self.gtfs_node_crosswalk == None:
-            self.gtfs_node_crosswalk = pd.DataFrame(columns=gtfs_nodexwalk_cols)
-        #buffers = [50,100,150] # in feet
-        route_patterns = pd.DataFrame(gtfs.route_patterns,columns=['route_id','route_short_name','route_long_name','direction_id','pattern_id'])
-        route_patterns = route_patterns.reset_index()
-        gtfs_stop_patterns = pd.merge(route_patterns, gtfs.stop_patterns,left_on='pattern_id',right_on='trip_id')
-        gtfs_stop_patterns['point'] = gtfs_stop_patterns.apply(self.map_projectWGS84_to_SPPoint, axis=1)
-        
-        grouped_gtfs = gtfs_stop_patterns.groupby(['route_id','pattern_id'])
-        
-        for line in self.lines:
-            stop_matches = [] # line name, champ node id, gtfs stop_id, distance
-            if isinstance(line, str):
-                pass
-            elif isinstance(line, TransitLine):
-                ft_stop_patterns = line.stopsAsDataFrame()
-                tot_match = float(len(ft_stop_patterns))
-                has_route_match = False
-                if line.agency_id != 'sf_muni':
-                    continue
-                for name, route_pattern in grouped_gtfs:
-                    this_route_match = True
-                    max_match = float(len(ft_stop_patterns))
-                    f = float(len(route_pattern)) / float(len(ft_stop_patterns))
-                    if f < match_threshold or f > 1 + (1 - match_threshold):
+
+        if not ( gtfs_agency and gtfs_path ) and not gtfs_path_dict:
+            raise NetworkException('either gtfs_agency and gtfs_path OR gtfs_path_dict')
+        if gtfs_agency and gtfs_path and gtfs_path_dict:
+            raise NetworkException('either gtfs_agency and gtfs_path OR gtfs_path_dict')
+        if gtfs_path_dict:
+            for gtfs_agency, gtfs_path in gtfs_path_dict.iteritems():
+                self.matchLinesToGTFS(gtfs_agency, gtfs_path)
+        else:
+            gtfs = gtfs_utils.GTFSFeed(gtfs_path)
+            gtfs.load()
+            gtfs.standardize()
+            gtfs.build_common_dfs()
+            gtfs_xwalk_cols = ['champ_line_name','route_id','route_short_name','direction_id','pattern_id','match']
+            gtfs_nodexwalk_cols = ['champ_line_name','champ_node_id','gtfs_stop_id','distance']
+            if not isinstance(self.gtfs_crosswalk, pd.DataFrame):
+                self.gtfs_crosswalk = pd.DataFrame(columns=gtfs_xwalk_cols) # champ_line_name -> gtfsFeed route_id, direction_id, pattern_id
+            if not isinstance(self.gtfs_node_crosswalk, pd.DataFrame):
+                self.gtfs_node_crosswalk = pd.DataFrame(columns=gtfs_nodexwalk_cols)
+            #buffers = [50,100,150] # in feet
+            route_patterns = pd.DataFrame(gtfs.route_patterns,columns=['route_id','route_short_name','route_long_name','direction_id','pattern_id'])
+            route_patterns = route_patterns.reset_index()
+            gtfs_stop_patterns = pd.merge(route_patterns, gtfs.stop_patterns,left_on='pattern_id',right_on='trip_id')
+            gtfs_stop_patterns['point'] = gtfs_stop_patterns.apply(self.map_projectWGS84_to_SPPoint, axis=1)
+            
+            grouped_gtfs = gtfs_stop_patterns.groupby(['route_id','pattern_id'])
+            
+            for line in self.lines:
+                stop_matches = [] # line name, champ node id, gtfs stop_id, distance
+                if isinstance(line, str):
+                    pass
+                elif isinstance(line, TransitLine):
+                    ft_stop_patterns = line.stopsAsDataFrame()
+                    tot_match = float(len(ft_stop_patterns))
+                    has_route_match = False
+                    if line.agency_id != gtfs_agency:
                         continue
-                    if max_match / tot_match < match_threshold:
-                        continue
-                    if sort:
-                        route_pattern = route_pattern.sort('stop_sequence').reset_index()
-                    last_idx = 0
-                    for ft_idx, ft_row in ft_stop_patterns.iterrows():
-                        ftp = Point(ft_row['x'],ft_row['y'])
-                        has_stop_match = False
-                        for gt_idx, gt_row in route_pattern[last_idx:].iterrows():
-                            gtp = gt_row['point']
-                            dist = ftp.distance(gtp)
-                            if dist <= dist_threshold:
-                                stop_matches.append([line.name,ft_row['stop_id'],gt_row['stop_id'],dist])
-                                has_stop_match = True
-                                last_idx = gt_idx
+                    for name, route_pattern in grouped_gtfs:
+                        this_route_match = True
+                        max_match = float(len(ft_stop_patterns))
+                        f = float(len(route_pattern)) / float(len(ft_stop_patterns))
+                        if f < match_threshold or f > 1 + (1 - match_threshold):
+                            continue
+                        if max_match / tot_match < match_threshold:
+                            continue
+                        if sort:
+                            route_pattern = route_pattern.sort('stop_sequence').reset_index()
+                        last_idx = 0
+                        for ft_idx, ft_row in ft_stop_patterns.iterrows():
+                            ftp = Point(ft_row['x'],ft_row['y'])
+                            has_stop_match = False
+                            for gt_idx, gt_row in route_pattern[last_idx:].iterrows():
+                                gtp = gt_row['point']
+                                dist = ftp.distance(gtp)
+                                if dist <= dist_threshold:
+                                    stop_matches.append([line.name,ft_row['stop_id'],gt_row['stop_id'],dist])
+                                    has_stop_match = True
+                                    last_idx = gt_idx
+                                    break
+                            if not has_stop_match:
+                                max_match -= 1.0
+                            if max_match/tot_match < match_threshold:
+                                this_route_match = False
                                 break
-                        if not has_stop_match:
-                            max_match -= 1.0
-                        if max_match/tot_match < match_threshold:
-                            this_route_match = False
-                            break
-                    if this_route_match:
-                        has_route_match = True
-                        data = [[line.name,gt_row['route_id'],gt_row['route_short_name'],gt_row['direction_id'],gt_row['pattern_id'],max_match]]
-                        self.gtfs_crosswalk = self.gtfs_crosswalk.append(pd.DataFrame(data=data,columns=gtfs_xwalk_cols))
-                        self.gtfs_node_crosswalk = self.gtfs_node_crosswalk.append(pd.DataFrame(data=stop_matches,columns=gtfs_nodexwalk_cols))
-                        WranglerLogger.debug('%s found match in gtfs %s  %s  %s  %s  %0.2f' % (line.name, gt_row['route_id'],gt_row['route_short_name'],gt_row['direction_id'],gt_row['pattern_id'],(max_match/tot_match)))
-                        
-                if not has_route_match:
-                    WranglerLogger.debug('%s no match found in gtfs' % line.name)
-                
-            else:
-                raise NetworkException("invalid type found in transit_network.lines: %s" % str(line))
-        self.gtfs_crosswalk.to_csv('found_crosswalk_predrop.csv')
-        # for the crosswalk, if a pattern_id matches multiple routes, just give it to the route that matches best
-        if 'keep' not in self.gtfs_crosswalk.columns.tolist():
-            self.gtfs_crosswalk['keep'] = 0
-        WranglerLogger.debug('gtfs_crosswalk found %d potential matches' % len(self.gtfs_crosswalk))
-        grouped_xwalk = self.gtfs_crosswalk.groupby('pattern_id')
-        for name, group in grouped_xwalk:
-            if len(group) == 1:
-                self.gtfs_crosswalk.loc[group.index,'keep'] == 1
-            elif len(group) > 1:
-                idxmax = group['match'].idxmax()
-                self.gtfs_crosswalk.loc[idxmax,'keep'] == 1
-        self.gtfs_crosswalk[self.gtfs_crosswalk['keep'] == 1]
-        WranglerLogger.debug('gtfs_crosswalk contains %d matches after dropping second-bests' % len(self.gtfs_crosswalk))
-        self.gtfs_crosswalk.to_csv('found_crosswalk_postdrop.csv')
-        self.gtfs_node_crosswalk.to_csv('found_node_crosswalk.csv')
+                        if this_route_match:
+                            has_route_match = True
+                            data = [[line.name,gt_row['route_id'],gt_row['route_short_name'],gt_row['direction_id'],gt_row['pattern_id'],(max_match/tot_match)]]
+                            self.gtfs_crosswalk = self.gtfs_crosswalk.append(pd.DataFrame(data=data,columns=gtfs_xwalk_cols))
+                            self.gtfs_node_crosswalk = self.gtfs_node_crosswalk.append(pd.DataFrame(data=stop_matches,columns=gtfs_nodexwalk_cols))
+                            WranglerLogger.debug('%s found match in gtfs %s  %s  %s  %s  %0.2f' % (line.name, gt_row['route_id'],gt_row['route_short_name'],gt_row['direction_id'],gt_row['pattern_id'],(max_match/tot_match)))
+                            
+                    if not has_route_match:
+                        WranglerLogger.debug('%s no match found in gtfs' % line.name)
+                    
+                else:
+                    raise NetworkException("invalid type found in transit_network.lines: %s" % str(line))
+            self.gtfs_crosswalk = self.gtfs_crosswalk.set_index('champ_line_name').reset_index()
+            self.gtfs_crosswalk.to_csv('found_crosswalk_predrop.csv')
+            # for the crosswalk, if a pattern_id matches multiple routes, just give it to the route that matches best
+            if 'keep' not in self.gtfs_crosswalk.columns.tolist():
+                self.gtfs_crosswalk['keep'] = 0
+            WranglerLogger.debug('gtfs_crosswalk found %d potential matches' % len(self.gtfs_crosswalk))
+            grouped_xwalk = self.gtfs_crosswalk.groupby('pattern_id')
+            for name, group in grouped_xwalk:
+                #print name
+                #print group
+                #raw_input('next')
+                if len(group) == 1:
+                    #print 'INDEX', self.gtfs_crosswalk.loc[group.index,]
+                    self.gtfs_crosswalk.loc[group.index,'keep'] = 1
+                elif len(group) > 1:
+                    idxmax = group['match'].idxmax()
+                    #print 'IDXMAX', self.gtfs_crosswalk.loc[idxmax,]
+                    self.gtfs_crosswalk.loc[idxmax,'keep'] = 1
+                else:
+                    print 'ELSE'
+            self.gtfs_crosswalk = self.gtfs_crosswalk[self.gtfs_crosswalk['keep'] == 1]
+            WranglerLogger.debug('gtfs_crosswalk contains %d matches after dropping second-bests' % len(self.gtfs_crosswalk))
+            self.gtfs_crosswalk.to_csv('found_crosswalk_postdrop.csv')
+            self.gtfs_node_crosswalk.to_csv('found_node_crosswalk.csv')
 
     def addDeparturesFromGTFS(self, gtfs_path):
         import gtfs_utils
         gtfs = gtfs_utils.GTFSFeed(gtfs_path)
         gtfs.load()
+        gtfs.standardize()
         gtfs.build_common_dfs()
         #gtfs.route_trips.to_csv('route_trips.csv')
         for line in self.lines:
@@ -1137,8 +1154,12 @@ class TransitNetwork(Network):
                 list_of_departure_times = gtfs.route_trips[gtfs.route_trips['pattern_id'].isin(list_of_pattern_ids)]['trip_departure_mpm'].tolist()
                 if len(list_of_departure_times) == 0:
                     WranglerLogger.warn("ROUTE ID %s: No GTFS departure times for, calculating from headways" % line.name)
-                    line.setDeparturesFromHeadways()
-                    WranglerLogger.warn("ROUTE ID %s: added %d departures" % (line.name, len(line.all_departure_times)))
+                    if len(line.all_departure_times) == 0:
+                        line.setDeparturesFromHeadways()
+                        WranglerLogger.warn("ROUTE ID %s: added %d departures" % (line.name, len(line.all_departure_times)))
+                    else:
+                        WranglerLogger.debug("ROUTE ID %s: Already has %d departure times assigned, not recalculating from headways" % (line.name, len(line.all_departure_times)))
+                    
                 else:
                     WranglerLogger.debug("ROUTE ID %s: Setting departure times from GTFS" % line.name)
                     line.setDepartures(list_of_departure_times)

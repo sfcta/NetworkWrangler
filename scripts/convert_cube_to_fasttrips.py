@@ -226,7 +226,15 @@ if __name__=='__main__':
         transit_network.addDeparturesFromHeadways(psuedo_random=PSUEDO_RANDOM_DEPARTURE_TIMES, offset=DEPARTURE_TIMES_OFFSET)
     else:
         for gtfs in REAL_GTFS:
-            transit_network.addDeparturesFromGTFS(gtfs, CROSSWALK)
+##            gtfs_dict = {'sf_muni':r'Q:\Model Development\SHRP2-fasttrips\Task2\gtfs\SFMTA_20120319',
+##                         'ac_transit':r'Q:\Model Development\SHRP2-fasttrips\Task2\gtfs\ACTransit_2012'}
+##            transit_network.matchLinesToGTFS(gtfs_path_dict=gtfs_dict)
+##            transit_network.matchLinesToGTFS(gtfs_agency='sf_muni',gtfs_path=gtfs)
+            # relax criteria on low-res network
+            transit_network.matchLinesToGTFS(gtfs_agency='ac_transit', gtfs_path=r'Q:\Model Development\SHRP2-fasttrips\Task2\gtfs\ACTransit_2012', dist_threshold=1000, match_threshold = 0.60)
+        for gtfs in REAL_GTFS:
+##            transit_network.addDeparturesFromGTFS(gtfs)
+            transit_network.addDeparturesFromGTFS(r'Q:\Model Development\SHRP2-fasttrips\Task2\gtfs\ACTransit_2012')
     
     WranglerLogger.debug("writing agencies")
     transit_network.writeFastTrips_Agencies(path=FT_OUTPATH)
