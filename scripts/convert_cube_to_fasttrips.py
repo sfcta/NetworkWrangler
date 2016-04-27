@@ -2,7 +2,7 @@ import copy,datetime,getopt,logging,os,shutil,sys,time
 import getopt
 from dbfpy import dbf
 sys.path.insert(0, os.path.join(os.path.dirname(__file__),".."))
-sys.path.insert(0, r'Y:\champ\util\pythonlib-migration\master_versions\gtfs_utils')
+
 CUBE_FREEFLOW   = None
 HWY_LOADED      = None
 TRN_SUPPLINKS   = None      # transit[tod].lin with dwell times, xfer_supplinks, and walk_drive_access:
@@ -16,7 +16,7 @@ PSUEDO_RANDOM_DEPARTURE_TIMES = None
 CHAMP_DIR       = None
 DEPARTURE_TIMES_OFFSET = None
 SORT_OUTPUTS    = False
-REAL_GTFS       = None
+GTFS_SETTINGS   = None
 CROSSWALK       = None
 
 USAGE = """
@@ -222,19 +222,18 @@ if __name__=='__main__':
         transit_network.createFastTrips_Fares(price_conversion=0.01)
         
     WranglerLogger.debug("adding departure times to all lines")
-    if not REAL_GTFS:
+    if not GTFS_SETTINGS:
         transit_network.addDeparturesFromHeadways(psuedo_random=PSUEDO_RANDOM_DEPARTURE_TIMES, offset=DEPARTURE_TIMES_OFFSET)
     else:
-        for gtfs in REAL_GTFS:
-##            gtfs_dict = {'sf_muni':r'Q:\Model Development\SHRP2-fasttrips\Task2\gtfs\SFMTA_20120319',
-##                         'ac_transit':r'Q:\Model Development\SHRP2-fasttrips\Task2\gtfs\ACTransit_2012'}
-##            transit_network.matchLinesToGTFS(gtfs_path_dict=gtfs_dict)
-##            transit_network.matchLinesToGTFS(gtfs_agency='sf_muni',gtfs_path=gtfs)
+        for agency, settings in GTFS_SETTINGS.iteritems():
             # relax criteria on low-res network
-            transit_network.matchLinesToGTFS(gtfs_agency='ac_transit', gtfs_path=r'Q:\Model Development\SHRP2-fasttrips\Task2\gtfs\ACTransit_2012', dist_threshold=1000, match_threshold = 0.60)
-        for gtfs in REAL_GTFS:
-##            transit_network.addDeparturesFromGTFS(gtfs)
-            transit_network.addDeparturesFromGTFS(r'Q:\Model Development\SHRP2-fasttrips\Task2\gtfs\ACTransit_2012')
+            WranglerLogger.debug('matching gtfs for %s using %s AND CROSSWALK %s ENCODING %s' % (agency, settings['path'], settings['crosswalk'], settings['gtfs_encoding']))
+            if agency == 'sf_muni': continue
+            transit_network.matchLinesToGTFS(gtfs_agency=agency,
+                                             gtfs_path=settings['path'],
+                                             route_crosswalk=settings['crosswalk'],
+                                             gtfs_encoding=settings['gtfs_encoding'])
+            transit_network.addDeparturesFromGTFS(agency=agency, gtfs_path=settings['path'], gtfs_encoding=settings['gtfs_encoding'])
     
     WranglerLogger.debug("writing agencies")
     transit_network.writeFastTrips_Agencies(path=FT_OUTPATH)
