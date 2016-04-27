@@ -56,12 +56,14 @@ if __name__=='__main__':
     print "writing route statistics"
 ##    late_night_routes = gtfs.route_statistics[(gtfs.route_statistics['freq'] > 0) & (gtfs.route_statistics['trip_departure_tp'] != 'other')]
 ##    late_night_routes.to_csv('%s_late_night_route_stats.csv' % tag)
-    shape_ids = gtfs.routes['shape_id'].drop_duplicates().tolist()
+    shape_ids = gtfs.route_trips['shape_id'].drop_duplicates().tolist()
     shapes = gtfs.shapes[gtfs.shapes['shape_id'].isin(shape_ids)]
 
     print "writing shapes"
 ##    shapes.to_csv('%s_late_night_shapes.csv' % tag)
-    shape_freq = pd.merge(shapes, gtfs.route_statistics, how='left', on='shape_id')
+    shape_freq = pd.merge(shapes, gtfs.route_patterns, how='left', on='shape_id')
+    shape_freq = pd.DataFrame(shape_freq, columns=shapes.columns.tolist()+['pattern_id'])
+    shape_freq = pd.merge(shape_freq, gtfs.route_statistics, how='left', on='pattern_id')
     #ln_freq = late_night_routes.fillna(-1)
     #ln_freq = ln_freq.set_index(['route_id','route_short_name','route_long_name','shape_id','direction_id'])
 ##    ln_freq = late_night_routes.pivot_table(index=['route_id','route_short_name','route_long_name','shape_id','direction_id'],
@@ -76,7 +78,7 @@ if __name__=='__main__':
     shape_writer.field('route_id',          'N',    10, 0)
     shape_writer.field('route_short_name',  'C',    10, 0)
     shape_writer.field('route_long_name',   'C',    50, 0)
-    shape_writer.field('direction_id',      'N',    1,  0)
+    shape_writer.field('direction_id',      'C',    15,  0)
     shape_writer.field('shape_id',          'N',    10, 0)        
     for tp in tp_list:
         shape_writer.field(tp, 'N', 10, 0)
@@ -97,7 +99,7 @@ if __name__=='__main__':
             shape_id = shape['shape_id']
             tp_freqs = []
             for tp in tp_list:
-                tp_freqs.append(shape[tp])
+                tp_freqs.append(shape['%s_freq' % tp])
             points = []
             
         if shape_id != shape['shape_id']:
@@ -110,7 +112,7 @@ if __name__=='__main__':
             shape_id = shape['shape_id']
             tp_freqs = []
             for tp in tp_list:
-                tp_freqs.append(shape[tp])
+                tp_freqs.append(shape['%s_freq' % tp])
             points = []
             
         point = [shape['shape_pt_lon'],shape['shape_pt_lat']]
@@ -118,7 +120,7 @@ if __name__=='__main__':
     # write the last one
     tp_freqs = []
     for tp in tp_list:
-        tp_freqs.append(shape[tp])
+        tp_freqs.append(shape['%s_freq' % tp])
     shape_writer.line([points])
     shape_writer.record(shape['route_id'], shape['route_short_name'],
                         shape['route_long_name'], shape['direction_id'], shape['shape_id'], *tp_freqs)
