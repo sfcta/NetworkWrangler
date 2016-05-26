@@ -94,8 +94,8 @@ class Fare(object):
             self.fare_class = self.fare_id
         else:
             self.fare_class = self.setFareId()
-        todpart1 = TimeStringToCHAMPTimePeriod(self.start_time)
-        todpart2 = TimeStringToCHAMPTimePeriod(self.end_time)
+        todpart1 = HHMMSSToCHAMPTimePeriod(self.start_time)
+        todpart2 = HHMMSSToCHAMPTimePeriod(self.end_time)
         if todpart1 == todpart2:
             todpart = todpart1
         else:
@@ -277,8 +277,8 @@ class FarelinksFare(Fare):
             elif i == 0:
                 raise NetworkException('FarelinksFare HAS INVALID mode type: %s' % str(self.modes))
 
-            todpart1 = TimeStringToCHAMPTimePeriod(self.start_time)
-            todpart2 = TimeStringToCHAMPTimePeriod(self.end_time)
+            todpart1 = HHMMSSToCHAMPTimePeriod(self.start_time)
+            todpart2 = HHMMSSToCHAMPTimePeriod(self.end_time)
             if todpart1 == todpart2:
                 todpart = todpart1
             else:

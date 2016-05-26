@@ -23,6 +23,12 @@ class WranglerLookups:
                                'PM':('15:30:00','18:29:59'),
                                'EV':('18:30:00','27:00:00'),
                                'EA':('03:00:00','05:59:59')}
+
+    TIMEPERIOD_TO_MPMRANGE = {'AM':(360,540),
+                              'MD':(540,930),
+                              'PM':(930,1110),
+                              'EV':(1110,1620),
+                              'EA':(180,360)}
     
     MODETYPE_TO_MODES = {"Local":[11,12,16,17,18,19],
                          "BRT":[13,20],
@@ -147,7 +153,7 @@ class WranglerLookups:
                            '80_': "golden_gate_transit", '82_': "golden_gate_transit", '83_': "golden_gate_transit",
                            '84_': "golden_gate_transit",
                            '90_': "ferry", '91_': "ferry", '92_': "ferry", '93_': "ferry", '94_': "ferry", '95_': "ferry",
-                           'EBA': "ebart", 'MUN': "sf_muni", 'PRES': "presidigo", 'SFS': "sfsu_shuttle",}
+                           'EBA': "ebart", 'MUN': "sf_muni", 'PRES': "presidigo", 'SFS': "sfsu_shuttle",'PM':'parkmerced_shuttle'}
 
     OPERATOR_NAME_TO_URL = {'caltrain':'http://www.caltrain.com/',
                             'amtrak':'http://www.amtrak.com/',

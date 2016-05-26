@@ -16,6 +16,8 @@ PSUEDO_RANDOM_DEPARTURE_TIMES = None
 CHAMP_DIR       = None
 DEPARTURE_TIMES_OFFSET = None
 SORT_OUTPUTS    = False
+GTFS_SETTINGS   = None
+CROSSWALK       = None
 
 USAGE = """
 
@@ -219,8 +221,18 @@ if __name__=='__main__':
         transit_network.addFaresToLines()
         transit_network.createFastTrips_Fares(price_conversion=0.01)
         
-    WranglerLogger.debug("adding first departure times to all lines")
-    transit_network.addFirstDeparturesToAllLines(psuedo_random=PSUEDO_RANDOM_DEPARTURE_TIMES, offset=DEPARTURE_TIMES_OFFSET)
+    WranglerLogger.debug("adding departure times to all lines")
+    if not GTFS_SETTINGS:
+        transit_network.addDeparturesFromHeadways(psuedo_random=PSUEDO_RANDOM_DEPARTURE_TIMES, offset=DEPARTURE_TIMES_OFFSET)
+    else:
+        for agency, settings in GTFS_SETTINGS.iteritems():
+            # relax criteria on low-res network
+            WranglerLogger.debug('matching gtfs for %s using %s AND CROSSWALK %s ENCODING %s' % (agency, settings['path'], settings['crosswalk'], settings['gtfs_encoding']))
+            #if agency == 'sf_muni': continue
+            transit_network.matchLinesToGTFS2(gtfs_agency=agency,
+                                             gtfs_path=settings['path'],
+                                             gtfs_encoding=settings['gtfs_encoding'])
+            transit_network.addDeparturesFromGTFS(agency=agency, gtfs_path=settings['path'], gtfs_encoding=settings['gtfs_encoding'])
     
     WranglerLogger.debug("writing agencies")
     transit_network.writeFastTrips_Agencies(path=FT_OUTPATH)
