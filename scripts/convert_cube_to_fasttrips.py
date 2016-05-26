@@ -228,10 +228,9 @@ if __name__=='__main__':
         for agency, settings in GTFS_SETTINGS.iteritems():
             # relax criteria on low-res network
             WranglerLogger.debug('matching gtfs for %s using %s AND CROSSWALK %s ENCODING %s' % (agency, settings['path'], settings['crosswalk'], settings['gtfs_encoding']))
-            if agency == 'sf_muni': continue
-            transit_network.matchLinesToGTFS(gtfs_agency=agency,
+            #if agency == 'sf_muni': continue
+            transit_network.matchLinesToGTFS2(gtfs_agency=agency,
                                              gtfs_path=settings['path'],
-                                             route_crosswalk=settings['crosswalk'],
                                              gtfs_encoding=settings['gtfs_encoding'])
             transit_network.addDeparturesFromGTFS(agency=agency, gtfs_path=settings['path'], gtfs_encoding=settings['gtfs_encoding'])
     
