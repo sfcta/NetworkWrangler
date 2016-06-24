@@ -288,10 +288,17 @@ class TransitLine(object):
         extra_links is an optional set of off-road links that may contain travel
         times.
         '''
+        import math #, geocoder
+        
         for a, b in zip(self.n[:-1],self.n[1:]):
             a_node = abs(int(a.num)) if isinstance(a, Node) else abs(int(a))
             b_node = abs(int(b.num)) if isinstance(b, Node) else abs(int(b))
-
+            # get measured distance to check speed (because Fast-Trips checks speed this way).
+##            a_lon, a_lat = reproject_to_wgs84(a.x,a.y,EPSG='+init=EPSG:2227')
+##            b_lon, b_lat = reproject_to_wgs84(b.x,b.y,EPSG='+init=EPSG:2227')
+            gdist = math.sqrt(math.pow((a.x-b.x),2)+math.pow((a.y-b.y),2))
+##            gdist = geocoder.distance((a_lat,a_lon),(b_lat,b_lon))
+            
             # get node-pairs and make TransitLinks out of them
             link_id = '%s,%s' % (a_node, b_node)
             link = TransitLink()
@@ -299,9 +306,14 @@ class TransitLine(object):
             
             for tp in WranglerLookups.ALL_TIMEPERIODS:
                 try:
-                    # is it in the streets network? then get the BUSTIME
-                    hwy_link_attr = highway_networks[tp][(a_node,b_node)]
-                    link['BUSTIME_%s' % tp] = float(hwy_link_attr[2])
+                    try:
+                        # is it in the streets network? then get the BUSTIME
+                        hwy_link_attr = highway_networks[tp][(a_node,b_node)]
+                        link['BUSTIME_%s' % tp] = float(hwy_link_attr[2])
+                    except:
+                        # how about the reverse link?
+                        hwy_link_attr = highway_networks[tp][(b_node,a_node)]
+                        link['BUSTIME_%s' % tp] = float(hwy_link_attr[2])
                 except:
                     # if it's not, then try offstreet links
                     found = False
@@ -321,7 +333,7 @@ class TransitLine(object):
 
                                 if timekey:
                                     # try to get the TIME first
-                                    link['BUSTIME_%s' % tp] = this_link[timekey]
+                                    link['BUSTIME_%s' % tp] = float(this_link[timekey])
                                     found = True
                                 else:
                                     #WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `TIME`" % (self.name, link_id, tp))
@@ -339,13 +351,12 @@ class TransitLine(object):
                                 break
                     # no off-street link (or it's missing TIME, or SPEED + DIST), then calculate the distance between points
                     if not found:
-                        import math, geocoder
                         WranglerLogger.debug("LINE %s, LINK %s, TOD %s: NO ON-STREET OR OFF-STREET LINK FOUND.  CALCULATING TRAVEL TIME USING MEASURED DISTANCE AND SPEED" % (self.name, link_id, tp))
-                        a_lon, a_lat = reproject_to_wgs84(a.x,a.y,EPSG='+init=EPSG:2227')
-                        b_lon, b_lat = reproject_to_wgs84(b.x,b.y,EPSG='+init=EPSG:2227')
+##                        a_lon, a_lat = reproject_to_wgs84(a.x,a.y,EPSG='+init=EPSG:2227')
+##                        b_lon, b_lat = reproject_to_wgs84(b.x,b.y,EPSG='+init=EPSG:2227')
                         if not dist: dist = math.sqrt(math.pow((a.x-b.x),2)+math.pow((a.y-b.y),2))
                         #print a_lon, a_lat, b_lon, b_lat
-                        gdist = geocoder.distance((a_lat,a_lon),(b_lat,b_lon))
+##                        gdist = geocoder.distance((a_lat,a_lon),(b_lat,b_lon))
                         if not xyspeed:
                             try:
                                 # if it's not a link attribute, get it from the line
@@ -356,7 +367,15 @@ class TransitLine(object):
                                 xyspeed = 15
                         link['BUSTIME_%s' % tp] = (60 * dist / 5280) / xyspeed
                         #WranglerLogger.debug('DIST %.2f, SPEED %d, TRAVELTIME %.2f' % (dist, xyspeed, link['BUSTIME_%s' % tp]))
-
+                if link['BUSTIME_%s' % tp] == 0:
+                    new_time = 60.0 * (gdist / 5280.0) / 15.0
+                    WranglerLogger.debug("LINE %s, LINK %s, TOD %s: HAS 0 BUS_TIME. SETTING BUS_TIME = %d BASED ON 15MPH" % (self.name, link_id, tp, new_time))
+                    link['BUSTIME_%s' % tp] = new_time
+##                    print "gdist", type(gdist), gdist
+##                    print "bustime", type(link['BUSTIME_%s' % tp]), link['BUSTIME_%s' % tp]
+##                    sys.exit()
+                if (gdist/5280) / (link['BUSTIME_%s' % tp] / 60) > 100:
+                    WranglerLogger.warn('link %s has length %0.2f and travel time %0.2f for a speed of %0.2f' % (link_id, gdist, link['BUSTIME_%s' % tp], (link['BUSTIME_%s' % tp] / (gdist/5280))))
             self.links[(a_node,b_node)] = link
                 
     def hasService(self):
