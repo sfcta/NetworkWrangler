@@ -1874,7 +1874,7 @@ class TransitNetwork(Network):
             
     def writeFastTrips_Fares(self,f_farerules='fare_rules.txt',f_farerules_ft='fare_rules_ft.txt',
                              f_fareattr='fare_attributes.txt',f_fareattr_ft='fare_attributes_ft.txt',
-                             f_faretransferrules='fare_transfer_rules.txt',
+                             f_faretransferrules='fare_transfer_rules_ft.txt',
                              path='.', writeHeaders=True, sortFareRules=False):
         df_farerules    = None
         df_farerules_ft = None
