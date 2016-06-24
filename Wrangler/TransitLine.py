@@ -332,7 +332,7 @@ class TransitLine(object):
                                     else: WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `DIST`" % (self.name, link_id, tp))
                                     if speedkey and distkey:
                                         WranglerLogger.debug("LINE %s, LINK %s, TOD %s: CALCULATING TRAVEL TIME USING LINK'S DISTANCE AND SPEED" % (self.name, link_id, tp))
-                                        link['BUSTIME_%s' % tp] = (60 * dist / 5280) / xyspeed
+                                        link['BUSTIME_%s' % tp] = (60 * dist / 100) / xyspeed
                                         found = True
                                     else:
                                         WranglerLogger.debug(repr(this_link))
@@ -749,6 +749,7 @@ class FastTripsTransitLine(TransitLine):
 
         # trips req'd
         self.service_id     = None
+        self.direction_id   = None
         # info for crosswalk between SF-CHAMP and GTFS-PLUS
         self.champ_direction_id = None
         # info for crosswalk between agency published GTFS and GTFS-PLUS
@@ -809,7 +810,7 @@ class FastTripsTransitLine(TransitLine):
         elif self.champ_direction_id == "O":
             self.direction_id = 0
         else:
-            self.direction_id = None
+            self.direction_id = 0
 
     def setRouteShortName(self, route_short_name=None):
         '''
@@ -1071,7 +1072,7 @@ class FastTripsTransitLine(TransitLine):
             tp = HHMMSSToCHAMPTimePeriod(stop_time_hhmmss,sep=':')
             seq = 1
             trip_id = id_generator.next()
-            f_trips.write('%d,%s,%s,%s,%s\n' % (trip_id,self.route_id,self.service_id,self.name,self.direction_id if self.direction_id else ''))
+            f_trips.write('%d,%s,%s,%s,%s\n' % (trip_id,self.route_id,self.service_id,self.name,self.direction_id))
 
             if tp in self.vehicle_types.keys():
                 vtype = self.vehicle_types[tp]
@@ -1113,7 +1114,7 @@ class FastTripsTransitLine(TransitLine):
         cum_dist = 0
         track_dist = True
         seq = 1
-        if writeHeaders: f.write('shape_id,node,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n')
+        if writeHeaders: f.write('shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n')
         
         for a, b in zip(self.n[:-1],self.n[1:]):
             if not isinstance(a, Node) or not isinstance(b, Node):
@@ -1122,11 +1123,11 @@ class FastTripsTransitLine(TransitLine):
                 raise NetworkException(ex)
             else:
                 a_node, b_node = abs(int(a.num)), abs(int(b.num))
-                f.write('%s,%s,%f,%f,%d,%f\n' % (self.name, a.num, a.stop_lat ,a.stop_lon, seq, cum_dist))
+                f.write('%s,%f,%f,%d,%f\n' % (self.name, a.stop_lat ,a.stop_lon, seq, cum_dist))
                 seq += 1
                 
         # write the last node
-        f.write('%s,%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].num, self.n[-1].stop_lat, self.n[-1].stop_lon, seq, cum_dist))
+        f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].stop_lat, self.n[-1].stop_lon, seq, cum_dist))
 
     def addFares(self, od_fares=None, xf_fares=None, farelinks_fares=None, price_conversion=1):
         TransitLine.addFares(self, od_fares,xf_fares,farelinks_fares)
