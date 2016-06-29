@@ -839,6 +839,9 @@ class TransitNetwork(Network):
                         else:
                             continue
                     elif supplink.isDriveFunnel() or supplink.isTransitTransfer():
+                        # drive funnel goes from pnr -> stop/station
+                        # transit transfer goes from stop/station to stop/station or pnr <-> stop/station
+                        # both are transfers as far as Fast-Trips is concerned
                         if (supplink.Anode, supplink.Bnode) in got_node_to_node_xfers:
                             continue
                         got_node_to_node_xfers.append((supplink.Anode,supplink.Bnode))
@@ -860,7 +863,7 @@ class TransitNetwork(Network):
                                     continue
                             
                                 self.fasttrips_transfer_supplinks[(ftsupp.Anode,ftsupp.Bnode,ftsupp.from_route_id,ftsupp.to_route_id)] = ftsupp
-                            
+                                
                     elif supplink.isDriveAccess() or supplink.isDriveEgress():
                         ftsupp = FastTripsDriveSupplink(hwyskims=hwyskims, pnrNodeToTaz=pnrNodeToTaz, tp=tp, template=supplink)
                         self.fasttrips_drive_supplinks[(ftsupp.Anode,ftsupp.Bnode,tp)] = ftsupp
@@ -1388,16 +1391,30 @@ class TransitNetwork(Network):
                 raise NetworkException('Unhandled data type %s in self.lines' % type(line))
 
     def createFastTrips_PNRs(self, coord_dict):
+        # first convert pnrs defined in .pnr files
         for pnr in self.pnrs:
             if isinstance(pnr, PNRLink):
-                if not isinstance(pnr.pnr, int):
+                if pnr.pnr == PNRLink.UNNUMBERED:
                     pnr_nodenum = int(pnr.station)
                 else:
                     pnr_nodenum = int(pnr.pnr)
                     #WranglerLogger.warn("Non-integer pnr node %s for pnr" % (str(pnr.pnr)
-                n = FastTripsNode(pnr_nodenum, coord_dict)
+                try:
+                    n = FastTripsNode(pnr_nodenum, coord_dict)
+                except:
+                    WranglerLogger.warn('PNR Node %d not found; placing PNR at station location' % pnr_nodenum)
+                    (x, y) = coord_dict[int(pnr.station)]
+                    x += 10
+                    y += 10
+                    coord_dict_mod = {pnr_nodenum: (x, y)}
+                    n = FastTripsNode(pnr_nodenum, coord_dict_mod)
                 self.fasttrips_pnrs[pnr_nodenum] = n
-        
+        # next, make psuedo-pnrs from drive-access links
+##        for supplink in self.fasttrips_drive_supplinks.values():
+##            if supplink.lot_id not in self.fasttrips_pnrs:
+##                n = FastTripsNode(supplink.lot_id, coord_dict)
+##                self.fasttrips_pnrs[supplink.lot_id] = n
+                
     def createFastTrips_Agencies(self):
         agency_data = []
         for line in self.lines:
