@@ -371,9 +371,6 @@ class TransitLine(object):
                     new_time = 60.0 * (gdist / 5280.0) / 15.0
                     WranglerLogger.debug("LINE %s, LINK %s, TOD %s: HAS 0 BUS_TIME. SETTING BUS_TIME = %d BASED ON 15MPH" % (self.name, link_id, tp, new_time))
                     link['BUSTIME_%s' % tp] = new_time
-##                    print "gdist", type(gdist), gdist
-##                    print "bustime", type(link['BUSTIME_%s' % tp]), link['BUSTIME_%s' % tp]
-##                    sys.exit()
                 if (gdist/5280) / (link['BUSTIME_%s' % tp] / 60) > 100:
                     WranglerLogger.warn('link %s has length %0.2f and travel time %0.2f for a speed of %0.2f' % (link_id, gdist, link['BUSTIME_%s' % tp], (link['BUSTIME_%s' % tp] / (gdist/5280))))
             self.links[(a_node,b_node)] = link
