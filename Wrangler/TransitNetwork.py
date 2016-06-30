@@ -804,6 +804,9 @@ class TransitNetwork(Network):
         got_node_to_node_xfers = [] # list of (from_node, to_node) transfer pairs
         counter = 0
         total_supplinks = 0
+        df_stops = self.getFastTrips_Stops_asDataFrame()
+        stop_list = df_stops['stop_id'].tolist()
+        
         for tp in WranglerLookups.ALL_TIMEPERIODS:
             total_supplinks += len(self.supplinks[tp])
             
@@ -816,6 +819,10 @@ class TransitNetwork(Network):
                         try:
                             ftsupp = FastTripsWalkSupplink(walkskims=walkskims,nodeToTaz=nodeToTaz,
                                                            maxTaz=maxTaz, template=supplink)
+                            # walk access may either be TAZ -> stop/station or TAZ -> PNR.  If it's the latter, flag it.
+                            if int(ftsupp.Bnode) not in stop_list:
+                                WranglerLogger.debug("setting node %s-%s to support link" % (ftsupp.Anode, ftsupp.Bnode))
+                                ftsupp.setSupportFlag(True)
                         except NetworkException as e:
                             WranglerLogger.debug(str(e))
                             WranglerLogger.debug("Skipping walk access supplink (%d,%d)" % (supplink.Anode,supplink.Bnode))
@@ -826,10 +833,20 @@ class TransitNetwork(Network):
                     elif supplink.isWalkFunnel():
                         for k, s in self.fasttrips_walk_supplinks.iteritems():
                             if k[1] == supplink.Anode:
+                                # if Bnode of an existing supplink is this link's Anode, then that node is a support link.A
+                                # flag it so we don't write it out later.
                                 s.setSupportFlag(True)
+                                # then make a new supplink from s.Anode to this.Bnode
                                 ftsupp = copy.deepcopy(s)
                                 ftsupp.Bnode = supplink.Bnode
                                 ftsupp.stop_id = supplink.Bnode
+                                ftsupp.setSupportFlag(False)
+                            if k[1] == supplink.Bnode:
+                                # walk funnels go both ways, so check the reverse, too.
+                                s.setSupportFlag(True)
+                                ftsupp = copy.deepcopy(s)
+                                ftsupp.Bnode = supplink.Anode
+                                ftsupp.Bnode = supplink.Anode
                                 ftsupp.setSupportFlag(False)
                         if ftsupp:
                             if (ftsupp.Anode,ftsupp.Bnode) in self.fasttrips_walk_supplinks.keys():
@@ -1521,6 +1538,7 @@ class TransitNetwork(Network):
         transfer_ft_columns = ['dist','from_route_id','to_route_id','schedule_precedence']
         
         for supplink in self.fasttrips_walk_supplinks.values():
+            # skip the supplinks that end at WNR
             if supplink.support_flag: continue
             try:
                 slist = supplink.asList(walk_columns)
@@ -1947,7 +1965,18 @@ class TransitNetwork(Network):
         df_transfer_rules = pd.DataFrame(columns=transfer_columns, data=transfer_data)
         df_transfer_rules = df_transfer_rules.drop_duplicates()
         df_transfer_rules.to_csv(os.path.join(path,f_faretransferrules),index=False,header=writeHeaders,float_format='%.2f')
-    
+
+    def getFastTrips_Stops_asDataFrame(self):
+        df_stops = None
+        for nodekey, node in self.fasttrips_nodes.iteritems():
+            if node.isStop():
+                df_row = node.asDataFrame(columns=['stop_id','stop_name','stop_lat','stop_lon','zone_id'])
+                if not isinstance(df_stops,pd.DataFrame):
+                    df_stops = df_row
+                else:
+                    df_stops = df_stops.append(df_row)
+        return df_stops
+                    
     def writeFastTrips_Stops(self,f_stops='stops.txt',f_stops_ft='stops_ft.txt',path='.', writeHeaders=True):
         # UNFINISHED
         # MAY NEED TO KNOW ZONES, WHICH WILL COME FROM ODFARES
