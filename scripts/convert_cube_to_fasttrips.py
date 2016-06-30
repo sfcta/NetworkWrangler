@@ -147,13 +147,23 @@ if __name__=='__main__':
         transit_network.addXY(nodes_dict)
         WranglerLogger.debug("adding travel times to all lines")
         transit_network.addTravelTimes(highway_networks)
-        WranglerLogger.debug("add pnrs")
-        transit_network.createFastTrips_PNRs(nodes_dict)
 
+    if do_fares:
+        WranglerLogger.debug("Making FarelinksFares unique")
+        transit_network.makeFarelinksUnique()
+        WranglerLogger.debug("creating zone ids")
+        transit_network.createFarelinksZones()
+        nodeNames = getChampNodeNameDictFromFile(os.environ["CHAMP_node_names"])
+        WranglerLogger.debug("Adding station names to OD Fares")
+        transit_network.addStationNamestoODFares(nodeNames)
+        WranglerLogger.debug("adding fares to lines")
+        transit_network.addFaresToLines()
+        transit_network.createFastTrips_Fares(price_conversion=0.01)
+    transit_network.createFastTrips_Nodes()
+    
     if do_supplinks and not TRN_SUPPLINKS:
         do_supplinks = False
         WranglerLogger.warn("Supplinks directory not defined (TRN_SUPPLINKS).  Skipping access and transfer links.")
-        
     if do_supplinks:
         #a lot of this stuff requires a model run directory with skims, and SkimUtils, so need to do some checks to make sure these are avaiable.
         WranglerLogger.debug("Merging supplinks.")
@@ -185,12 +195,12 @@ if __name__=='__main__':
         WranglerLogger.debug("\tsetting up highway skims for access links.")
         hwyskims = {}
         
-        try:
-            for tpnum,tpstr in Skim.TIMEPERIOD_NUM_TO_STR.items():
-                hwyskims[tpnum] = HighwaySkim(file_dir=MODEL_RUN_DIR, timeperiod=tpstr)
-        except:
-            WranglerLogger.debug("HighwaySkim module or MODEL_RUN_DIR not available.  Skipping HighwaySkims.  Some walk access link attributes will be blank.")
-            hwyskims = None
+        ##try:
+        for tpnum,tpstr in Skim.TIMEPERIOD_NUM_TO_STR.items():
+            hwyskims[tpnum] = HighwaySkim(file_dir=MODEL_RUN_DIR, timeperiod=tpstr)
+##        except:
+##            WranglerLogger.debug("HighwaySkim module or MODEL_RUN_DIR not available.  Skipping HighwaySkims.  Some walk access link attributes will be blank.")
+##            hwyskims = None
             
         pnrTAZtoNode = {}
 
@@ -208,18 +218,8 @@ if __name__=='__main__':
         
         WranglerLogger.debug("\tconverting supplinks to fasttrips format.")
         transit_network.getFastTripsSupplinks(walkskim,nodeToTaz,maxTAZ,hwyskims,pnrNodeToTAZ)
-        
-    if do_fares:
-        WranglerLogger.debug("Making FarelinksFares unique")
-        transit_network.makeFarelinksUnique()
-        WranglerLogger.debug("creating zone ids")
-        transit_network.createFarelinksZones()
-        nodeNames = getChampNodeNameDictFromFile(os.environ["CHAMP_node_names"])
-        WranglerLogger.debug("Adding station names to OD Fares")
-        transit_network.addStationNamestoODFares(nodeNames)
-        WranglerLogger.debug("adding fares to lines")
-        transit_network.addFaresToLines()
-        transit_network.createFastTrips_Fares(price_conversion=0.01)
+        WranglerLogger.debug("add pnrs")
+        transit_network.createFastTrips_PNRs(nodes_dict)
         
     WranglerLogger.debug("adding departure times to all lines")
     if not GTFS_SETTINGS:
@@ -251,7 +251,6 @@ if __name__=='__main__':
         WranglerLogger.debug("writing fares")
         transit_network.writeFastTrips_Fares(path=FT_OUTPATH, sortFareRules=SORT_OUTPUTS)
     WranglerLogger.debug("writing stops")
-    transit_network.createFastTrips_Nodes()
     transit_network.writeFastTrips_Stops(path=FT_OUTPATH)
     if do_highways:
         WranglerLogger.debug("writing pnrs")
@@ -259,6 +258,13 @@ if __name__=='__main__':
     WranglerLogger.debug("Writing supplinks")
     transit_network.writeFastTrips_Access(path=FT_OUTPATH)
 
+    print "copying to csv for readability"
+    os.mkdir(os.path.join(FT_OUTPATH,'csvs'))
+    for file in ['agency.txt','calendar.txt','drive_access_ft.txt','drive_access_points_ft.txt','fare_attributes.txt','fare_attributes_ft.txt','fare_rules.txt',
+                 'fare_rules_ft.txt','fare_transfer_rules_ft.txt','routes.txt','routes_ft.txt','shapes.txt','stop_times.txt','stop_times_ft.txt','stops.txt',
+                 'stops_ft.txt','transfers.txt','transfers_ft.txt','trips.txt','trips_ft.txt','vehicles_ft.txt','walk_access_ft.txt']:
+        shutil.copyfile(os.path.join(FT_OUTPATH,file),os.path.join(FT_OUTPATH,'csvs',file.replace('.txt','.csv')))
+        
     if test:
         print "testing"
 
