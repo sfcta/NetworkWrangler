@@ -211,7 +211,8 @@ class FastTripsWalkSupplink(Supplink):
         else:
             raise NetworkException("Counldn't find TAZ for node %d in (%d, %d)" % (self.Bnode,self.Anode,self.Bnode))
         
-        self.dist               = walkskims.getWalkSkimAttribute(oTaz,dTaz,"DISTANCE") if self.dist in [None,0] else self.dist  # link sum (miles).  Keep the original distance if it's available.
+        self.dist               = walkskims.getWalkSkimAttribute(oTaz,dTaz,"DISTANCE") if self.dist == None else self.dist  # link sum (miles).  Keep the original distance if it's available.
+        #self.dist = max(self.dist, 0.01)
         self.population_density = walkskims.getWalkSkimAttribute(oTaz,dTaz,"AVGPOPDEN")  # average pop/acre
         self.employment_density = walkskims.getWalkSkimAttribute(oTaz,dTaz,"AVGEMPDEN")  # average employment/acre
         self.retail_density     = None #walkSkim.getWalkSkimAttribute(oTaz,dTaz,"AVGRETDEN")  # average retail/acre
