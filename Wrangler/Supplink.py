@@ -164,7 +164,7 @@ class FastTripsWalkSupplink(Supplink):
         # walk_access req'd
         self.taz = self.Anode
         self.stop_id = self.Bnode
-        self.dist = None
+        self.dist = float(self['DIST'])*0.01 if 'DIST' in self.keys() else None
         
         # walk_access optional
         if walkskims and nodeToTaz and maxTaz:
@@ -211,13 +211,13 @@ class FastTripsWalkSupplink(Supplink):
         else:
             raise NetworkException("Counldn't find TAZ for node %d in (%d, %d)" % (self.Bnode,self.Anode,self.Bnode))
         
-        self.dist               = walkskims.getWalkSkimAttribute(oTaz,dTaz,"DISTANCE")   # link sum (miles)
+        self.dist               = walkskims.getWalkSkimAttribute(oTaz,dTaz,"DISTANCE") if self.dist in [None,0] else self.dist  # link sum (miles).  Keep the original distance if it's available.
         self.population_density = walkskims.getWalkSkimAttribute(oTaz,dTaz,"AVGPOPDEN")  # average pop/acre
         self.employment_density = walkskims.getWalkSkimAttribute(oTaz,dTaz,"AVGEMPDEN")  # average employment/acre
         self.retail_density     = None #walkSkim.getWalkSkimAttribute(oTaz,dTaz,"AVGRETDEN")  # average retail/acre
         self.auto_capacity      = walkskims.getWalkSkimAttribute(oTaz,dTaz,"AVGCAP")     # average road capacity (vph)
         self.elevation_gain     = walkskims.getWalkSkimAttribute(oTaz,dTaz,"ABS_RISE")   # link sum when rise > 0 (feet)
-        self.indirectness       = walkskims.getWalkSkimAttribute(oTaz,dTaz,"INDIRECTNESS") # distance divided by rock dove distance
+        self.indirectness       = max(walkskims.getWalkSkimAttribute(oTaz,dTaz,"INDIRECTNESS"),1) # distance divided by rock dove distance, force to be 1 if the skim distance is less than straight-line
         
     
 class FastTripsDriveSupplink(Supplink):
@@ -294,7 +294,7 @@ class FastTripsDriveSupplink(Supplink):
                 cost = btoll + vtoll
 
         self.dist = dist
-        self.cost = cost
+        self.cost = cost * 0.01
         self.travel_time = time
         self.setStartTimeEndTimeFromTimePeriod(tpstr)
 

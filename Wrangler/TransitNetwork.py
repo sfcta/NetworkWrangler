@@ -804,6 +804,9 @@ class TransitNetwork(Network):
         got_node_to_node_xfers = [] # list of (from_node, to_node) transfer pairs
         counter = 0
         total_supplinks = 0
+        df_stops = self.getFastTrips_Stops_asDataFrame()
+        stop_list = df_stops['stop_id'].tolist()
+        
         for tp in WranglerLookups.ALL_TIMEPERIODS:
             total_supplinks += len(self.supplinks[tp])
             
@@ -816,6 +819,10 @@ class TransitNetwork(Network):
                         try:
                             ftsupp = FastTripsWalkSupplink(walkskims=walkskims,nodeToTaz=nodeToTaz,
                                                            maxTaz=maxTaz, template=supplink)
+                            # walk access may either be TAZ -> stop/station or TAZ -> PNR.  If it's the latter, flag it.
+                            if int(ftsupp.Bnode) not in stop_list:
+                                WranglerLogger.debug("setting node %s-%s to support link" % (ftsupp.Anode, ftsupp.Bnode))
+                                ftsupp.setSupportFlag(True)
                         except NetworkException as e:
                             WranglerLogger.debug(str(e))
                             WranglerLogger.debug("Skipping walk access supplink (%d,%d)" % (supplink.Anode,supplink.Bnode))
@@ -826,10 +833,20 @@ class TransitNetwork(Network):
                     elif supplink.isWalkFunnel():
                         for k, s in self.fasttrips_walk_supplinks.iteritems():
                             if k[1] == supplink.Anode:
+                                # if Bnode of an existing supplink is this link's Anode, then that node is a support link.A
+                                # flag it so we don't write it out later.
                                 s.setSupportFlag(True)
+                                # then make a new supplink from s.Anode to this.Bnode
                                 ftsupp = copy.deepcopy(s)
                                 ftsupp.Bnode = supplink.Bnode
                                 ftsupp.stop_id = supplink.Bnode
+                                ftsupp.setSupportFlag(False)
+                            if k[1] == supplink.Bnode:
+                                # walk funnels go both ways, so check the reverse, too.
+                                s.setSupportFlag(True)
+                                ftsupp = copy.deepcopy(s)
+                                ftsupp.Bnode = supplink.Anode
+                                ftsupp.Bnode = supplink.Anode
                                 ftsupp.setSupportFlag(False)
                         if ftsupp:
                             if (ftsupp.Anode,ftsupp.Bnode) in self.fasttrips_walk_supplinks.keys():
@@ -839,6 +856,9 @@ class TransitNetwork(Network):
                         else:
                             continue
                     elif supplink.isDriveFunnel() or supplink.isTransitTransfer():
+                        # drive funnel goes from pnr -> stop/station
+                        # transit transfer goes from stop/station to stop/station or pnr <-> stop/station
+                        # both are transfers as far as Fast-Trips is concerned
                         if (supplink.Anode, supplink.Bnode) in got_node_to_node_xfers:
                             continue
                         got_node_to_node_xfers.append((supplink.Anode,supplink.Bnode))
@@ -860,7 +880,7 @@ class TransitNetwork(Network):
                                     continue
                             
                                 self.fasttrips_transfer_supplinks[(ftsupp.Anode,ftsupp.Bnode,ftsupp.from_route_id,ftsupp.to_route_id)] = ftsupp
-                            
+                                
                     elif supplink.isDriveAccess() or supplink.isDriveEgress():
                         ftsupp = FastTripsDriveSupplink(hwyskims=hwyskims, pnrNodeToTaz=pnrNodeToTaz, tp=tp, template=supplink)
                         self.fasttrips_drive_supplinks[(ftsupp.Anode,ftsupp.Bnode,tp)] = ftsupp
@@ -1388,16 +1408,30 @@ class TransitNetwork(Network):
                 raise NetworkException('Unhandled data type %s in self.lines' % type(line))
 
     def createFastTrips_PNRs(self, coord_dict):
+        # first convert pnrs defined in .pnr files
         for pnr in self.pnrs:
             if isinstance(pnr, PNRLink):
-                if not isinstance(pnr.pnr, int):
+                if pnr.pnr == PNRLink.UNNUMBERED:
                     pnr_nodenum = int(pnr.station)
                 else:
                     pnr_nodenum = int(pnr.pnr)
                     #WranglerLogger.warn("Non-integer pnr node %s for pnr" % (str(pnr.pnr)
-                n = FastTripsNode(pnr_nodenum, coord_dict)
+                try:
+                    n = FastTripsNode(pnr_nodenum, coord_dict)
+                except:
+                    WranglerLogger.warn('PNR Node %d not found; placing PNR at station location' % pnr_nodenum)
+                    (x, y) = coord_dict[int(pnr.station)]
+                    x += 10
+                    y += 10
+                    coord_dict_mod = {pnr_nodenum: (x, y)}
+                    n = FastTripsNode(pnr_nodenum, coord_dict_mod)
                 self.fasttrips_pnrs[pnr_nodenum] = n
-        
+        # next, make psuedo-pnrs from drive-access links
+##        for supplink in self.fasttrips_drive_supplinks.values():
+##            if supplink.lot_id not in self.fasttrips_pnrs:
+##                n = FastTripsNode(supplink.lot_id, coord_dict)
+##                self.fasttrips_pnrs[supplink.lot_id] = n
+                
     def createFastTrips_Agencies(self):
         agency_data = []
         for line in self.lines:
@@ -1504,6 +1538,7 @@ class TransitNetwork(Network):
         transfer_ft_columns = ['dist','from_route_id','to_route_id','schedule_precedence']
         
         for supplink in self.fasttrips_walk_supplinks.values():
+            # skip the supplinks that end at WNR
             if supplink.support_flag: continue
             try:
                 slist = supplink.asList(walk_columns)
@@ -1874,7 +1909,7 @@ class TransitNetwork(Network):
             
     def writeFastTrips_Fares(self,f_farerules='fare_rules.txt',f_farerules_ft='fare_rules_ft.txt',
                              f_fareattr='fare_attributes.txt',f_fareattr_ft='fare_attributes_ft.txt',
-                             f_faretransferrules='fare_transfer_rules.txt',
+                             f_faretransferrules='fare_transfer_rules_ft.txt',
                              path='.', writeHeaders=True, sortFareRules=False):
         df_farerules    = None
         df_farerules_ft = None
@@ -1930,7 +1965,18 @@ class TransitNetwork(Network):
         df_transfer_rules = pd.DataFrame(columns=transfer_columns, data=transfer_data)
         df_transfer_rules = df_transfer_rules.drop_duplicates()
         df_transfer_rules.to_csv(os.path.join(path,f_faretransferrules),index=False,header=writeHeaders,float_format='%.2f')
-    
+
+    def getFastTrips_Stops_asDataFrame(self):
+        df_stops = None
+        for nodekey, node in self.fasttrips_nodes.iteritems():
+            if node.isStop():
+                df_row = node.asDataFrame(columns=['stop_id','stop_name','stop_lat','stop_lon','zone_id'])
+                if not isinstance(df_stops,pd.DataFrame):
+                    df_stops = df_row
+                else:
+                    df_stops = df_stops.append(df_row)
+        return df_stops
+                    
     def writeFastTrips_Stops(self,f_stops='stops.txt',f_stops_ft='stops_ft.txt',path='.', writeHeaders=True):
         # UNFINISHED
         # MAY NEED TO KNOW ZONES, WHICH WILL COME FROM ODFARES

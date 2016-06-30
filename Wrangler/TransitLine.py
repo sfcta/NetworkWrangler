@@ -288,20 +288,31 @@ class TransitLine(object):
         extra_links is an optional set of off-road links that may contain travel
         times.
         '''
+        import math #, geocoder
+        
         for a, b in zip(self.n[:-1],self.n[1:]):
             a_node = abs(int(a.num)) if isinstance(a, Node) else abs(int(a))
             b_node = abs(int(b.num)) if isinstance(b, Node) else abs(int(b))
-
+            # get measured distance to check speed (because Fast-Trips checks speed this way).
+            gdist = math.sqrt(math.pow((a.x-b.x),2)+math.pow((a.y-b.y),2)) / 5280 # convert measured feet-distance to miles
+            
             # get node-pairs and make TransitLinks out of them
             link_id = '%s,%s' % (a_node, b_node)
             link = TransitLink()
             link.setId(link_id)
-            
+            used_method = 'none'
             for tp in WranglerLookups.ALL_TIMEPERIODS:
                 try:
-                    # is it in the streets network? then get the BUSTIME
-                    hwy_link_attr = highway_networks[tp][(a_node,b_node)]
-                    link['BUSTIME_%s' % tp] = float(hwy_link_attr[2])
+                    try:
+                        # is it in the streets network? then get the BUSTIME (in MINUTES)
+                        hwy_link_attr = highway_networks[tp][(a_node,b_node)]
+                        link['BUSTIME_%s' % tp] = float(hwy_link_attr[2])
+                        used_method = 'bustime'
+                    except:
+                        # how about the reverse link?
+                        hwy_link_attr = highway_networks[tp][(b_node,a_node)]
+                        link['BUSTIME_%s' % tp] = float(hwy_link_attr[2])
+                        used_method = 'bustime'
                 except:
                     # if it's not, then try offstreet links
                     found = False
@@ -310,6 +321,8 @@ class TransitLine(object):
                     for tlink in extra_links:
                         if isinstance(tlink,TransitLink):
                             # could be smarter here and look first for (a,b) == (a,b) and then only look for (a,b) == (b,a) if the first isn't found.
+                            # TIME in MINUTES, DIST in HUNDREDTHS OF MILES, SPEED in (MPH?)
+                            # "time" in MINUTES, 'dist' in MILES
                             if (int(tlink.Anode) == a_node and int(tlink.Bnode) == b_node) or (int(tlink.Anode) == b_node and int(tlink.Bnode) == a_node):
                                 this_link = tlink
                                 upperkeys = []
@@ -321,42 +334,52 @@ class TransitLine(object):
 
                                 if timekey:
                                     # try to get the TIME first
-                                    link['BUSTIME_%s' % tp] = this_link[timekey]
+                                    link['BUSTIME_%s' % tp] = float(this_link[timekey])
                                     found = True
+                                    used_method = 'link time'
                                 else:
                                     #WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `TIME`" % (self.name, link_id, tp))
                                     # if no TIME try to get from SPEED and DIST
                                     if speedkey: xyspeed = float(this_link[speedkey])
                                     else: WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `SPEED`" % (self.name, link_id, tp))
-                                    if distkey: dist = float(this_link[distkey])
+                                    if distkey: dist = float(this_link[distkey]) / 100 # convert hundredths of miles to miles
                                     else: WranglerLogger.debug("LINE %s, LINK %s, TOD %s: OFF-STREET TRANSIT LINK HAS NO ATTRIBUTE `DIST`" % (self.name, link_id, tp))
                                     if speedkey and distkey:
                                         WranglerLogger.debug("LINE %s, LINK %s, TOD %s: CALCULATING TRAVEL TIME USING LINK'S DISTANCE AND SPEED" % (self.name, link_id, tp))
-                                        link['BUSTIME_%s' % tp] = (60 * dist / 5280) / xyspeed
+                                        link['BUSTIME_%s' % tp] = (60 * dist) / xyspeed
                                         found = True
+                                        used_method = '60 * dist (%0.2f)/ xyspeed (%d)'
                                     else:
                                         WranglerLogger.debug(repr(this_link))
                                 break
                     # no off-street link (or it's missing TIME, or SPEED + DIST), then calculate the distance between points
                     if not found:
-                        import math, geocoder
                         WranglerLogger.debug("LINE %s, LINK %s, TOD %s: NO ON-STREET OR OFF-STREET LINK FOUND.  CALCULATING TRAVEL TIME USING MEASURED DISTANCE AND SPEED" % (self.name, link_id, tp))
-                        a_lon, a_lat = reproject_to_wgs84(a.x,a.y,EPSG='+init=EPSG:2227')
-                        b_lon, b_lat = reproject_to_wgs84(b.x,b.y,EPSG='+init=EPSG:2227')
-                        if not dist: dist = math.sqrt(math.pow((a.x-b.x),2)+math.pow((a.y-b.y),2))
+##                        a_lon, a_lat = reproject_to_wgs84(a.x,a.y,EPSG='+init=EPSG:2227')
+##                        b_lon, b_lat = reproject_to_wgs84(b.x,b.y,EPSG='+init=EPSG:2227')
+                        if not dist:
+                            dist = math.sqrt(math.pow((a.x-b.x),2)+math.pow((a.y-b.y),2)) / 5280 # convert measured feet-distance to miles
+                            used_method = 'calculated distance'
                         #print a_lon, a_lat, b_lon, b_lat
-                        gdist = geocoder.distance((a_lat,a_lon),(b_lat,b_lon))
+##                        gdist = geocoder.distance((a_lat,a_lon),(b_lat,b_lon))
                         if not xyspeed:
                             try:
                                 # if it's not a link attribute, get it from the line
                                 xyspeed = int(self.attr['XYSPEED'])
+                                used_method += ', xyspeed'
                             except:
                                 # if no speed attribute there, then assume it's 15 mph
                                 WranglerLogger.debug("LINE %s, LINK %s, TOD %s: NO XY-SPEED.  Setting XYSPEED = 15" % (self.name, link_id, tp))
                                 xyspeed = 15
-                        link['BUSTIME_%s' % tp] = (60 * dist / 5280) / xyspeed
+                                used_method += ', asserted speed 15mph'
+                        link['BUSTIME_%s' % tp] = (60 * dist) / xyspeed
                         #WranglerLogger.debug('DIST %.2f, SPEED %d, TRAVELTIME %.2f' % (dist, xyspeed, link['BUSTIME_%s' % tp]))
-
+                if link['BUSTIME_%s' % tp] == 0:
+                    new_time = (60.0 * gdist) / 15.0
+                    WranglerLogger.debug("LINE %s, LINK %s, TOD %s: HAS 0 BUS_TIME. SETTING BUS_TIME = %d BASED ON 15MPH (method: %s)" % (self.name, link_id, tp, new_time, used_method))
+                    link['BUSTIME_%s' % tp] = new_time
+                if gdist / (link['BUSTIME_%s' % tp] / 60) > 100:
+                    WranglerLogger.warn('link %s has length %0.2f and travel time %0.2f for a speed of %0.2f (method: %s)' % (link_id, gdist, link['BUSTIME_%s' % tp], (60.0 * gdist) / link['BUSTIME_%s' % tp], used_method))
             self.links[(a_node,b_node)] = link
                 
     def hasService(self):
@@ -749,6 +772,7 @@ class FastTripsTransitLine(TransitLine):
 
         # trips req'd
         self.service_id     = None
+        self.direction_id   = None
         # info for crosswalk between SF-CHAMP and GTFS-PLUS
         self.champ_direction_id = None
         # info for crosswalk between agency published GTFS and GTFS-PLUS
@@ -809,7 +833,7 @@ class FastTripsTransitLine(TransitLine):
         elif self.champ_direction_id == "O":
             self.direction_id = 0
         else:
-            self.direction_id = None
+            self.direction_id = 0
 
     def setRouteShortName(self, route_short_name=None):
         '''
@@ -1071,7 +1095,7 @@ class FastTripsTransitLine(TransitLine):
             tp = HHMMSSToCHAMPTimePeriod(stop_time_hhmmss,sep=':')
             seq = 1
             trip_id = id_generator.next()
-            f_trips.write('%d,%s,%s,%s,%s\n' % (trip_id,self.route_id,self.service_id,self.name,self.direction_id if self.direction_id else ''))
+            f_trips.write('%d,%s,%s,%s,%s\n' % (trip_id,self.route_id,self.service_id,self.name,self.direction_id))
 
             if tp in self.vehicle_types.keys():
                 vtype = self.vehicle_types[tp]
@@ -1113,7 +1137,7 @@ class FastTripsTransitLine(TransitLine):
         cum_dist = 0
         track_dist = True
         seq = 1
-        if writeHeaders: f.write('shape_id,node,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n')
+        if writeHeaders: f.write('shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n')
         
         for a, b in zip(self.n[:-1],self.n[1:]):
             if not isinstance(a, Node) or not isinstance(b, Node):
@@ -1122,11 +1146,11 @@ class FastTripsTransitLine(TransitLine):
                 raise NetworkException(ex)
             else:
                 a_node, b_node = abs(int(a.num)), abs(int(b.num))
-                f.write('%s,%s,%f,%f,%d,%f\n' % (self.name, a.num, a.stop_lat ,a.stop_lon, seq, cum_dist))
+                f.write('%s,%f,%f,%d,%f\n' % (self.name, a.stop_lat ,a.stop_lon, seq, cum_dist))
                 seq += 1
                 
         # write the last node
-        f.write('%s,%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].num, self.n[-1].stop_lat, self.n[-1].stop_lon, seq, cum_dist))
+        f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].stop_lat, self.n[-1].stop_lon, seq, cum_dist))
 
     def addFares(self, od_fares=None, xf_fares=None, farelinks_fares=None, price_conversion=1):
         TransitLine.addFares(self, od_fares,xf_fares,farelinks_fares)
