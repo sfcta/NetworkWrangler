@@ -1184,8 +1184,8 @@ class FastTripsTransitLine(TransitLine):
         Reverses the current line -- adds a "-" to the name, and reverses the node order
         """
         # if name is 12 chars, have to drop one -- cube has a MAX of 12
-        if len(self.name)>=11: self.name = self.name[:11]
-        self.name = self.name + "R"
+        if len(self.name)>=10: self.name = self.name[:10]
+        self.name = self.name + "_R"
         self.setDirectionId((line.direction_id+1)%2) # set the direction to reverse
         self.n.reverse()
         
