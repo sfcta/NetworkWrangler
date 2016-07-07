@@ -752,7 +752,7 @@ class FastTripsTransitLine(TransitLine):
         TransitLine.__init__(self, name, template)
         # routes req'd
         self.route_id = None
-        self.route_short_name = self.name
+        self.route_short_name = None
         self.route_long_name = None
         self.route_type = None
 
@@ -808,11 +808,9 @@ class FastTripsTransitLine(TransitLine):
         sets GTFS-PLUS, SF-CHAMP, and other information based on the linename_pattern
         set agency_id, route_id, route_short_name, route_long_name, direction_id
         agency_id: name of the agency, human-readable
-        route_id: since it has to be unique id, agency_id + route number / name / letter
-            this is for ease of compatibility with published gtfs
-        route_short_name: self.name by default
-            this is for ease of compatibility with SF-CHAMP
-        route_long_name: self.name by default, could be filled in with GTFS long name
+        route_id: <agency_id>_<route_number>. <agency_id> is used because the id has to be unique
+        route_short_name: <operator><line>
+        route_long_name: <operator><line>, could be filled in with GTFS long name
         direction_id: GTFS requires 0 or 1, but this info may not be known at the time
         champ_direction_id: store SF-CHAMP direction indication to set GTFS-PLUS direction_id later
             
@@ -822,8 +820,8 @@ class FastTripsTransitLine(TransitLine):
         self.agency_id = WranglerLookups.OPERATOR_ID_TO_NAME[m.groupdict()['operator']]
         self.service_id = self.agency_id+'_weekday'
         self.route_id = '%s_%s' % (self.agency_id, m.groupdict()['line'])
-        self.route_short_name = self.name #m.groupdict()['line']
-        self.route_long_name = self.name
+        self.route_short_name = '%s%s' % (m.groupdict()['operator'], m.groupdict()['line'])
+        self.route_long_name = '%s%s' % (m.groupdict()['operator'], m.groupdict()['line'])
         if m.groupdict()['direction']:
             self.champ_direction_id = m.groupdict()['direction']
         else:
@@ -843,7 +841,7 @@ class FastTripsTransitLine(TransitLine):
             self.route_short_name = route_short_name
             return self.route_short_name
         m = Regexes.linename_pattern.match(self.name)
-        self.route_short_name = m.groupdict()['line']
+        self.route_short_name = '%s%s' % (m.groupdict()['operator'], m.groupdict()['line'])
         return self.route_short_name
     
     def setRouteLongName(self, route_long_name=None):
@@ -851,10 +849,7 @@ class FastTripsTransitLine(TransitLine):
             self.route_long_name = route_long_name
             return self.route_long_name
         m = Regexes.linename_pattern.match(self.name)
-        if m.groupdict()['direction']:
-            self.route_long_name = '%s_%s' % (m.groupdict()['line'], m.groupdict()['direction'])
-        else:
-            self.route_long_name = m.groupdict()['line']
+        self.route_long_name = '%s%s' % (m.groupdict()['operator'], m.groupdict()['line'])
         return self.route_long_name
 
     def setRouteType(self, route_type=None):

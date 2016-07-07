@@ -1653,10 +1653,23 @@ class TransitNetwork(Network):
                 else:
                     df_routes_ft = df_routes_ft.append(df_row)
 
+        df_routes = df_routes.drop_duplicates()
+        df_routes_ft = df_routes_ft.drop_duplicates()
         #df_routes = df_routes.sort(['agency_id','route_id'])
         df_routes.to_csv(os.path.join(path,f_routes),index=False,header=writeHeaders)
         df_routes_ft.to_csv(os.path.join(path,f_routes_ft),index=False,header=writeHeaders)
-        
+
+    def writeFastTrips_toCHAMP(self, f='fasttrips_to_champ.csv', path='.', writeHeaders=True):
+        df_ft_to_champ = None
+        for line in self.lines:
+            if isinstance(line, FastTripsTransitLine):
+                df_row = line.asDataFrame(columns=['route_id','direction_id','name'])
+                if not isinstance(df_ft_to_champ, pd.DataFrame):
+                    df_ft_to_champ = df_row
+                else:
+                    df_ft_to_champ = df_ft_to_champ.append(df_row)
+        df_ft_to_champ.to_csv(os.path.join(path,f),index=False,header=writeHeaders)
+                
     def getLeftAndRightTransitNodeNums(self,farelink,stops_only=True):
         '''
         This is a function added for fast-trips.
