@@ -1021,12 +1021,12 @@ class FastTripsTransitLine(TransitLine):
                     if b > 0:
                         stop_b          = b
                         destination_id  = Node.node_to_zone[stop_b]
-                        if type(destination_id) == float: raise NetworkException('destination_id = %f' % destination_id)
-                        if destination_id == '33.0': raise NetworkException('destination_id = str(%s)' % destination_id)
-                        if destination_id == 33:
-                            WranglerLogger.debug('destination_id = %f, type: %s' % (destination_id, str(type(destination_id))))
-                            if type(destination_id) != int:
-                                raw_input('y/n')
+##                        if type(destination_id) == float: raise NetworkException('destination_id = %f' % destination_id)
+##                        if destination_id == '33.0': raise NetworkException('destination_id = str(%s)' % destination_id)
+##                        if destination_id == 33:
+##                            WranglerLogger.debug('destination_id = %f, type: %s' % (destination_id, str(type(destination_id))))
+##                            if type(destination_id) != int:
+##                                raw_input('y/n')
                         modenum = int(self.attr['MODE'])
                         rule = FastTripsFare(champ_line_name = self.name,champ_mode=modenum,
                                              price=price,origin_id=origin_id,
@@ -1090,7 +1090,7 @@ class FastTripsTransitLine(TransitLine):
             tp = HHMMSSToCHAMPTimePeriod(stop_time_hhmmss,sep=':')
             seq = 1
             trip_id = id_generator.next()
-            f_trips.write('%d,%s,%s,%s,%s\n' % (trip_id,self.route_id,self.service_id,self.name,self.direction_id))
+            f_trips.write('%d,%s,%s,%s,%d\n' % (trip_id,self.route_id,self.service_id,self.name,self.direction_id))
 
             if tp in self.vehicle_types.keys():
                 vtype = self.vehicle_types[tp]
@@ -1177,7 +1177,18 @@ class FastTripsTransitLine(TransitLine):
                 all_data.append(route_data+stop_data)
         df = pd.DataFrame(data=all_data, columns=route_cols+stop_cols)
         return df
-    
+
+
+    def reverse(self):
+        """
+        Reverses the current line -- adds a "-" to the name, and reverses the node order
+        """
+        # if name is 12 chars, have to drop one -- cube has a MAX of 12
+        if len(self.name)>=11: self.name = self.name[:11]
+        self.name = self.name + "R"
+        self.setDirectionId((line.direction_id+1)%2) # set the direction to reverse
+        self.n.reverse()
+        
     def _applyTemplate(self, template):
         TransitLine._applyTemplate(self, template)
         for n, idx in zip(self.n, range(len(self.n))):
