@@ -826,9 +826,9 @@ class FastTripsTransitLine(TransitLine):
             self.champ_direction_id = m.groupdict()['direction']
         else:
             self.champ_direction_id = None
-        if self.champ_direction_id == "I":
+        if self.champ_direction_id in ["I","EB","SB"]:
             self.direction_id = 1
-        elif self.champ_direction_id == "O":
+        elif self.champ_direction_id in ["O","WB","NB"]:
             self.direction_id = 0
         else:
             self.direction_id = 0
@@ -1184,9 +1184,9 @@ class FastTripsTransitLine(TransitLine):
         Reverses the current line -- adds a "-" to the name, and reverses the node order
         """
         # if name is 12 chars, have to drop one -- cube has a MAX of 12
-        if len(self.name)>=10: self.name = self.name[:10]
-        self.name = self.name + "_R"
-        self.setDirectionId((line.direction_id+1)%2) # set the direction to reverse
+        if len(self.name)>=11: self.name = self.name[:11]
+        self.name = self.name + "r"
+        self.setDirectionId((self.direction_id+1)%2) # set the direction to reverse
         self.n.reverse()
         
     def _applyTemplate(self, template):
