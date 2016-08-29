@@ -820,7 +820,7 @@ class FastTripsTransitLine(TransitLine):
         self.agency_id = WranglerLookups.OPERATOR_ID_TO_NAME[m.groupdict()['operator']]
         self.service_id = self.agency_id+'_weekday'
         self.route_id = '%s_%s' % (self.agency_id, m.groupdict()['line'])
-        self.route_short_name = '%s%s' % (m.groupdict()['operator'], m.groupdict()['line'])
+        self.route_short_name = None #'%s%s' % (m.groupdict()['operator'], m.groupdict()['line'])
         self.route_long_name = '%s%s' % (m.groupdict()['operator'], m.groupdict()['line'])
         if m.groupdict()['direction']:
             self.champ_direction_id = m.groupdict()['direction']
@@ -1028,7 +1028,8 @@ class FastTripsTransitLine(TransitLine):
 ##                            if type(destination_id) != int:
 ##                                raw_input('y/n')
                         modenum = int(self.attr['MODE'])
-                        rule = FastTripsFare(champ_line_name = self.name,champ_mode=modenum,
+                        rule = FastTripsFare(route_id=self.route_id,
+                                             champ_line_name=self.name,champ_mode=modenum,
                                              price=price,origin_id=origin_id,
                                              destination_id=destination_id,
                                              zone_suffixes=zone_suffixes,
@@ -1044,7 +1045,8 @@ class FastTripsTransitLine(TransitLine):
             for fare in self.od_fares:
                 if isinstance(fare, ODFare):
                     modenum = int(self.attr['MODE'])
-                    rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum,
+                    rule = FastTripsFare(route_id=self.route_id,
+                                         champ_line_name=self.name,champ_mode=modenum,
                                          price=self.board_fare.price + fare.price,
                                          origin_id=fare.from_name,
                                          destination_id=fare.to_name,
@@ -1059,7 +1061,8 @@ class FastTripsTransitLine(TransitLine):
             origin_id       = None
             destination_id  = None
             modenum = int(self.attr['MODE'])
-            rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum,
+            rule = FastTripsFare(route_id=self.route_id,
+                                 champ_line_name=self.name,champ_mode=modenum,
                                  price=self.board_fare.price,
                                  origin_id=origin_id,
                                  destination_id=destination_id,

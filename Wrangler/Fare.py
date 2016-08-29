@@ -331,7 +331,7 @@ class FastTripsFare(Fare):
     The fare_id is a unique identifier for a fare in fast-trips, returned by a query on route_id, origin_id, and destination_id.
     
     '''
-    def __init__(self,fare_id=None,operator=None,line=None,origin_id=None,destination_id=None,
+    def __init__(self,fare_id=None,route_id=None,operator=None,line=None,origin_id=None,destination_id=None,
                  contains_id=None,price=None,fare_class=None,start_time=None,end_time=None,
                  transfers=None,transfer_duration=None,
                  champ_line_name=None, champ_mode=None,
@@ -340,7 +340,7 @@ class FastTripsFare(Fare):
         if isinstance(origin_id, float): origin_id = int(origin_id)
         if isinstance(destination_id, float): destination_id = int(destination_id)
         
-        self.route_id       = champ_line_name
+        self.route_id       = route_id #champ_line_name
         self.origin_id      = origin_id
         self.destination_id = destination_id
         self.contains_id    = contains_id
