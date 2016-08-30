@@ -1,0 +1,3 @@
+vehicle_name,seated_capacity,standing_capacity
+bus,20,0
+train,20,20

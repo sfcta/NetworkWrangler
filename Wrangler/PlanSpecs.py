@@ -11,6 +11,7 @@ class PlanSpecs:
         """
         Read specs file, check out projects and check the network type and project year
         """
+        self.plan_name          = networkdir 
         self.projects           = [] # list of projects included in the plan
         self.projectdict        = {} # plan name => dictionary of attributes
         #network is necessary to check out projects
@@ -25,6 +26,7 @@ class PlanSpecs:
                 self.modelyear = kwargs['modelyear']
             #These next two don't do anything now.
             if 'tag_override' in kwargs.keys():
+                WranglerLogger.debug('found tag_override: %s' % (kwargs['tag_override']))
                 self.tag_override = kwargs['tag_override']
                 if not isinstance(self.tag_override, dict):
                     raise NetworkException('when passing tag_override, must be dict type')
@@ -41,24 +43,29 @@ class PlanSpecs:
                 project_name = l[header.index("projectname")]
                 projType = l[header.index("type")]
                 try:
-                    project_tag = self.tag_override[proect_name]
-                    WranglerLogger.debug('applying project-specific tag %s to project %s within plan %s' %(project_tag, project_name, networkdir))
+                    project_tag = self.tag_override[project_name]
+                    WranglerLogger.debug('applying project-specific tag %s to project %s within plan %s' %(project_tag, project_name, self.plan_name))
                 except:
                     project_tag = tag
+                    WranglerLogger.debug('applying general tag %s to project %s within plan %s' %(project_tag, project_name, self.plan_name))
                 self.projectdict[project_name] = {}
                 self.projects.append(project_name)
 
                 self.projectdict[project_name]["name"]=project_name
                 self.projectdict[project_name]["projtype"]=projType
-                
+
                 try:
                     self.projectdict[project_name]["modelyear"] = kwargs['modelyear']
-                except:
+                    #WranglerLogger.debug('project %s using MODELYEAR %s' % (project_name, kwargs['modelyear']))
+                except Exception as e:
                     self.projectdict[project_name]["modelyear"] = None #WranglerLogger.debug(
+                    #WranglerLogger.debug('project %s: MODELYEAR error: %s' % (project_name, e))
                 try:
                     self.projectdict[project_name]['tag'] = kwargs['tag_override'][project_name]
-                except:
+                    #WranglerLogger.debug('project %s using TAG %s' % (project_name, kwargs['tag_override'][project_name]))
+                except Exception as e:
                     self.projectdict[project_name]['tag'] = None
+                    #WranglerLogger.debug('project %s: TAG error: %s' % (project_name, e))
                     
                 # if project = "dir1/dir2" assume dir1 is git, dir2 is the projectsubdir
                 (head,tail) = os.path.split(project_name)
@@ -83,7 +90,7 @@ class PlanSpecs:
         if 'modelyear' in self.projectdict[project_name].keys():
             projDict['kwargs']['modelyear'] = self.projectdict[project_name]['modelyear']
         if 'tag' in self.projectdict[project_name].keys():
-            projDict['tag'] = self.projectdict['tag']
+            projDict['tag'] = self.projectdict[project_name]['tag']
 ##        if 'kwargs' in self.projectdict[project_name].keys():
 ##            projDict['kwargs'] = self.projectdict[project_name]['kwargs']
 

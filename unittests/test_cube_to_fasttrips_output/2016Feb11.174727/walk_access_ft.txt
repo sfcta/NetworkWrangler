@@ -1,0 +1,1 @@
+taz,stop_id,dist,elevation_gain,population_density,employment_density,auto_capacity,indirectness
