@@ -258,6 +258,9 @@ if __name__=='__main__':
     WranglerLogger.debug("Writing supplinks")
     transit_network.writeFastTrips_Access(path=FT_OUTPATH)
 
+    print "writing FastTrips to CHAMP route name crosswalk"
+    transit_network.writeFastTrips_toCHAMP(path=FT_OUTPATH)
+    
     print "copying to csv for readability"
     os.mkdir(os.path.join(FT_OUTPATH,'csvs'))
     for file in ['agency.txt','calendar.txt','drive_access_ft.txt','drive_access_points_ft.txt','fare_attributes.txt','fare_attributes_ft.txt','fare_rules.txt',

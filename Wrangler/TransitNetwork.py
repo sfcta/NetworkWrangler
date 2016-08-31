@@ -911,34 +911,34 @@ class TransitNetwork(Network):
                 data.append(reverse_line.asList(cols))
                 reverse_lines.append(reverse_line)
         self.lines += reverse_lines
-        direction_df = pd.DataFrame(data,columns=cols)
-        # set direction ids; first get dataframe that will function as lookup for 
-        direction_df['direction_id'] = np.nan
-        direction_df.loc[direction_df['champ_direction_id'].isin(['O','WB','NB']),'direction_id'] = 0
-        direction_df.loc[direction_df['champ_direction_id'].isin(['I','EB','SB']),'direction_id'] = 1
-        unassigned = direction_df[pd.isnull(direction_df['direction_id'])]
-        grouped = unassigned.groupby(['agency_id','route_id'])
-
-        for name, group in grouped:
-            if len(group) > 2:
-                raise NetworkException('%s (%s) trying to assign direction id to route with more than 2 directions' % (name[1], group['name']))
-            elif len(group) > 1:
-                WranglerLogger.debug('%s (%s) setting direction_id = 0' % (name[1], group.loc[group.index[0],'name']))
-                WranglerLogger.debug('%s (%s) setting direction_id = 1' % (name[1], group.loc[group.index[1],'name']))
-                direction_df.loc[group.index[0],'direction_id'] = 0
-                direction_df.loc[group.index[1],'direction_id'] = 1
-            else:
-                WranglerLogger.debug('%s (%s) only one direction, setting direction_id = 0' % (name[1], group['name']))
-                direction_df.loc[group.index[0],'direction_id'] = 0
-
-        direction_df.to_csv('direction_lookup.csv')
-        # check validity of lines
-        for line in self.lines:
-            if not isinstance(line, FastTripsTransitLine) and not isinstance(line, str):
-                raise NetworkException('failed to convert')
-            if isinstance(line, FastTripsTransitLine):
-                direction_id = direction_df.loc[(direction_df['agency_id']==line.agency_id) & (direction_df['name']==line.name),'direction_id'].irow(0)
-                line.setDirectionId(direction_id)
+##        direction_df = pd.DataFrame(data,columns=cols)
+##        # set direction ids; first get dataframe that will function as lookup for 
+##        direction_df['direction_id'] = np.nan
+##        direction_df.loc[direction_df['champ_direction_id'].isin(['O','WB','NB']),'direction_id'] = 0
+##        direction_df.loc[direction_df['champ_direction_id'].isin(['I','EB','SB']),'direction_id'] = 1
+##        unassigned = direction_df[pd.isnull(direction_df['direction_id'])]
+##        grouped = unassigned.groupby(['agency_id','route_id'])
+##
+##        for name, group in grouped:
+##            if len(group) > 2:
+##                raise NetworkException('%s (%s) trying to assign direction id to route with more than 2 directions' % (name[1], group['name']))
+##            elif len(group) > 1:
+##                WranglerLogger.debug('%s (%s) setting direction_id = 0' % (name[1], group.loc[group.index[0],'name']))
+##                WranglerLogger.debug('%s (%s) setting direction_id = 1' % (name[1], group.loc[group.index[1],'name']))
+##                direction_df.loc[group.index[0],'direction_id'] = 0
+##                direction_df.loc[group.index[1],'direction_id'] = 1
+##            else:
+##                WranglerLogger.debug('%s (%s) only one direction, setting direction_id = 0' % (name[1], group['name']))
+##                direction_df.loc[group.index[0],'direction_id'] = 0
+##
+##        direction_df.to_csv('direction_lookup.csv')
+##        # check validity of lines
+##        for line in self.lines:
+##            if not isinstance(line, FastTripsTransitLine) and not isinstance(line, str):
+##                raise NetworkException('failed to convert')
+##            if isinstance(line, FastTripsTransitLine):
+##                direction_id = direction_df.loc[(direction_df['agency_id']==line.agency_id) & (direction_df['name']==line.name),'direction_id'].irow(0)
+##                line.setDirectionId(direction_id)
             
     def makeFarelinksUnique(self):
         '''
@@ -1647,16 +1647,29 @@ class TransitNetwork(Network):
                     df_routes = df_row
                 else:
                     df_routes = df_routes.append(df_row)
-                df_row = line.asDataFrame(['route_id','mode','fare_class','proof_of_payment'])
+                df_row = line.asDataFrame(['route_id','mode','proof_of_payment'])
                 if not isinstance(df_routes_ft,pd.DataFrame):
                     df_routes_ft = df_row
                 else:
                     df_routes_ft = df_routes_ft.append(df_row)
 
+        df_routes = df_routes.drop_duplicates()
+        df_routes_ft = df_routes_ft.drop_duplicates()
         #df_routes = df_routes.sort(['agency_id','route_id'])
         df_routes.to_csv(os.path.join(path,f_routes),index=False,header=writeHeaders)
         df_routes_ft.to_csv(os.path.join(path,f_routes_ft),index=False,header=writeHeaders)
-        
+
+    def writeFastTrips_toCHAMP(self, f='fasttrips_to_champ.csv', path='.', writeHeaders=True):
+        df_ft_to_champ = None
+        for line in self.lines:
+            if isinstance(line, FastTripsTransitLine):
+                df_row = line.asDataFrame(columns=['route_id','direction_id','name'])
+                if not isinstance(df_ft_to_champ, pd.DataFrame):
+                    df_ft_to_champ = df_row
+                else:
+                    df_ft_to_champ = df_ft_to_champ.append(df_row)
+        df_ft_to_champ.to_csv(os.path.join(path,f),index=False,header=writeHeaders)
+                
     def getLeftAndRightTransitNodeNums(self,farelink,stops_only=True):
         '''
         This is a function added for fast-trips.

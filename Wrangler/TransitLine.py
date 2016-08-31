@@ -752,7 +752,7 @@ class FastTripsTransitLine(TransitLine):
         TransitLine.__init__(self, name, template)
         # routes req'd
         self.route_id = None
-        self.route_short_name = self.name
+        self.route_short_name = None
         self.route_long_name = None
         self.route_type = None
 
@@ -808,11 +808,9 @@ class FastTripsTransitLine(TransitLine):
         sets GTFS-PLUS, SF-CHAMP, and other information based on the linename_pattern
         set agency_id, route_id, route_short_name, route_long_name, direction_id
         agency_id: name of the agency, human-readable
-        route_id: since it has to be unique id, agency_id + route number / name / letter
-            this is for ease of compatibility with published gtfs
-        route_short_name: self.name by default
-            this is for ease of compatibility with SF-CHAMP
-        route_long_name: self.name by default, could be filled in with GTFS long name
+        route_id: <agency_id>_<route_number>. <agency_id> is used because the id has to be unique
+        route_short_name: <operator><line>
+        route_long_name: <operator><line>, could be filled in with GTFS long name
         direction_id: GTFS requires 0 or 1, but this info may not be known at the time
         champ_direction_id: store SF-CHAMP direction indication to set GTFS-PLUS direction_id later
             
@@ -822,15 +820,15 @@ class FastTripsTransitLine(TransitLine):
         self.agency_id = WranglerLookups.OPERATOR_ID_TO_NAME[m.groupdict()['operator']]
         self.service_id = self.agency_id+'_weekday'
         self.route_id = '%s_%s' % (self.agency_id, m.groupdict()['line'])
-        self.route_short_name = self.name #m.groupdict()['line']
-        self.route_long_name = self.name
+        self.route_short_name = None #'%s%s' % (m.groupdict()['operator'], m.groupdict()['line'])
+        self.route_long_name = '%s%s' % (m.groupdict()['operator'], m.groupdict()['line'])
         if m.groupdict()['direction']:
             self.champ_direction_id = m.groupdict()['direction']
         else:
             self.champ_direction_id = None
-        if self.champ_direction_id == "I":
+        if self.champ_direction_id in ["I","EB","SB"]:
             self.direction_id = 1
-        elif self.champ_direction_id == "O":
+        elif self.champ_direction_id in ["O","WB","NB"]:
             self.direction_id = 0
         else:
             self.direction_id = 0
@@ -843,7 +841,7 @@ class FastTripsTransitLine(TransitLine):
             self.route_short_name = route_short_name
             return self.route_short_name
         m = Regexes.linename_pattern.match(self.name)
-        self.route_short_name = m.groupdict()['line']
+        self.route_short_name = '%s%s' % (m.groupdict()['operator'], m.groupdict()['line'])
         return self.route_short_name
     
     def setRouteLongName(self, route_long_name=None):
@@ -851,10 +849,7 @@ class FastTripsTransitLine(TransitLine):
             self.route_long_name = route_long_name
             return self.route_long_name
         m = Regexes.linename_pattern.match(self.name)
-        if m.groupdict()['direction']:
-            self.route_long_name = '%s_%s' % (m.groupdict()['line'], m.groupdict()['direction'])
-        else:
-            self.route_long_name = m.groupdict()['line']
+        self.route_long_name = '%s%s' % (m.groupdict()['operator'], m.groupdict()['line'])
         return self.route_long_name
 
     def setRouteType(self, route_type=None):
@@ -1026,14 +1021,15 @@ class FastTripsTransitLine(TransitLine):
                     if b > 0:
                         stop_b          = b
                         destination_id  = Node.node_to_zone[stop_b]
-                        if type(destination_id) == float: raise NetworkException('destination_id = %f' % destination_id)
-                        if destination_id == '33.0': raise NetworkException('destination_id = str(%s)' % destination_id)
-                        if destination_id == 33:
-                            WranglerLogger.debug('destination_id = %f, type: %s' % (destination_id, str(type(destination_id))))
-                            if type(destination_id) != int:
-                                raw_input('y/n')
+##                        if type(destination_id) == float: raise NetworkException('destination_id = %f' % destination_id)
+##                        if destination_id == '33.0': raise NetworkException('destination_id = str(%s)' % destination_id)
+##                        if destination_id == 33:
+##                            WranglerLogger.debug('destination_id = %f, type: %s' % (destination_id, str(type(destination_id))))
+##                            if type(destination_id) != int:
+##                                raw_input('y/n')
                         modenum = int(self.attr['MODE'])
-                        rule = FastTripsFare(champ_line_name = self.name,champ_mode=modenum,
+                        rule = FastTripsFare(route_id=self.route_id,
+                                             champ_line_name=self.name,champ_mode=modenum,
                                              price=price,origin_id=origin_id,
                                              destination_id=destination_id,
                                              zone_suffixes=zone_suffixes,
@@ -1049,7 +1045,8 @@ class FastTripsTransitLine(TransitLine):
             for fare in self.od_fares:
                 if isinstance(fare, ODFare):
                     modenum = int(self.attr['MODE'])
-                    rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum,
+                    rule = FastTripsFare(route_id=self.route_id,
+                                         champ_line_name=self.name,champ_mode=modenum,
                                          price=self.board_fare.price + fare.price,
                                          origin_id=fare.from_name,
                                          destination_id=fare.to_name,
@@ -1064,7 +1061,8 @@ class FastTripsTransitLine(TransitLine):
             origin_id       = None
             destination_id  = None
             modenum = int(self.attr['MODE'])
-            rule = FastTripsFare(champ_line_name=self.name,champ_mode=modenum,
+            rule = FastTripsFare(route_id=self.route_id,
+                                 champ_line_name=self.name,champ_mode=modenum,
                                  price=self.board_fare.price,
                                  origin_id=origin_id,
                                  destination_id=destination_id,
@@ -1095,7 +1093,7 @@ class FastTripsTransitLine(TransitLine):
             tp = HHMMSSToCHAMPTimePeriod(stop_time_hhmmss,sep=':')
             seq = 1
             trip_id = id_generator.next()
-            f_trips.write('%d,%s,%s,%s,%s\n' % (trip_id,self.route_id,self.service_id,self.name,self.direction_id))
+            f_trips.write('%d,%s,%s,%s,%d\n' % (trip_id,self.route_id,self.service_id,self.name,self.direction_id))
 
             if tp in self.vehicle_types.keys():
                 vtype = self.vehicle_types[tp]
@@ -1182,7 +1180,18 @@ class FastTripsTransitLine(TransitLine):
                 all_data.append(route_data+stop_data)
         df = pd.DataFrame(data=all_data, columns=route_cols+stop_cols)
         return df
-    
+
+
+    def reverse(self):
+        """
+        Reverses the current line -- adds a "-" to the name, and reverses the node order
+        """
+        # if name is 12 chars, have to drop one -- cube has a MAX of 12
+        if len(self.name)>=11: self.name = self.name[:11]
+        self.name = self.name + "r"
+        self.setDirectionId((self.direction_id+1)%2) # set the direction to reverse
+        self.n.reverse()
+        
     def _applyTemplate(self, template):
         TransitLine._applyTemplate(self, template)
         for n, idx in zip(self.n, range(len(self.n))):
