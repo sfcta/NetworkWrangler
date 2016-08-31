@@ -1647,7 +1647,7 @@ class TransitNetwork(Network):
                     df_routes = df_row
                 else:
                     df_routes = df_routes.append(df_row)
-                df_row = line.asDataFrame(['route_id','mode','fare_class','proof_of_payment'])
+                df_row = line.asDataFrame(['route_id','mode','proof_of_payment'])
                 if not isinstance(df_routes_ft,pd.DataFrame):
                     df_routes_ft = df_row
                 else:
