@@ -183,12 +183,15 @@ class FastTripsNode(Node):
     '''
     FastTrips Node Class.
     '''
-    def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None, template=None):
+    def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None, template=None, isPNR=False):
         Node.__init__(self,n,champ_coord_dict,template)
 
         # stops.txt req'd
         self.stop_id        = abs(int(n))
+        self.ispnr          = isPNR
         self.stop_name      = Node.descriptions[self.stop_id] if self.stop_id in Node.descriptions.keys() else str(self.stop_id)
+        if self.ispnr:
+            self.lot_id = 'lot_' + str(self.stop_id)
         self.stop_sequence  = None
         if stop_lat and stop_lon:
             self.stop_lat = stop_lat

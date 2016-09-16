@@ -703,7 +703,7 @@ class TransitParser(Parser):
         key = None
         value = None
         comment = None
-        cost, modes, nodepairs = None, [], []
+        cost, oneway_flag, modes, nodepairs = None, None, [], []
         
         for fare in self.tfp.farelinks_fares:
             # add comments as simple strings:
@@ -731,6 +731,7 @@ class TransitParser(Parser):
                         for kidkid in kid[2]:
                             if kidkid[0]=='attr_value': value = kidkid[1]
                             if key=='modes': modes.append(value)
+                            if key.lower()=='oneway': oneway_flag = value in ['Y','T']
                     if kid[0]=='semicolon_comment': comment = kid[1].strip()
             if fare[0] == 'cost':
                 if currentFare:
@@ -738,10 +739,10 @@ class TransitParser(Parser):
                     currentFare = None
                 cost = fare[1]
 
-            if len(nodepairs) > 0 and len(modes) > 0 and cost:
-                currentFare = FarelinksFare(links=nodepairs, modes=modes, price=cost)
+            if len(nodepairs) > 0 and len(modes) > 0 and cost and oneway_flag is not None:
+                currentFare = FarelinksFare(links=nodepairs, modes=modes, price=cost, oneway=oneway_flag)
                 #print "Current Fare: ", str(currentFare)
-                cost, modes, nodepairs = None, [], []
+                cost, oneway_flag, modes, nodepairs = None, None, [], []
 
         if currentFare: rows.append(currentFare)
         return rows     

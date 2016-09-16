@@ -831,8 +831,12 @@ class TransitNetwork(Network):
                     elif supplink.isWalkEgress():
                         pass
                     elif supplink.isWalkFunnel():
+                        new_fasttrips_walk_supplinks = None
                         for k, s in self.fasttrips_walk_supplinks.iteritems():
                             if k[1] == supplink.Anode:
+                                # making a copy of fasttrips_walk_supplinks so that we can update it as we go along
+                                # we cannot update fasttrips_walk_supplinks while iterating over it
+                                if new_fasttrips_walk_supplinks is None: new_fasttrips_walk_supplinks = copy.deepcopy(self.fasttrips_walk_supplinks)
                                 # if Bnode of an existing supplink is this link's Anode, then that node is a support link.A
                                 # flag it so we don't write it out later.
                                 s.setSupportFlag(True)
@@ -841,20 +845,24 @@ class TransitNetwork(Network):
                                 ftsupp.Bnode = supplink.Bnode
                                 ftsupp.stop_id = supplink.Bnode
                                 ftsupp.setSupportFlag(False)
+                                new_fasttrips_walk_supplinks[(ftsupp.Anode,ftsupp.Bnode)] = ftsupp
+                            # walk funnels go both ways, so check the reverse, too.
                             if k[1] == supplink.Bnode:
-                                # walk funnels go both ways, so check the reverse, too.
+                                if new_fasttrips_walk_supplinks is None: new_fasttrips_walk_supplinks = copy.deepcopy(self.fasttrips_walk_supplinks)
                                 s.setSupportFlag(True)
                                 ftsupp = copy.deepcopy(s)
                                 ftsupp.Bnode = supplink.Anode
-                                ftsupp.Bnode = supplink.Anode
+                                ftsupp.stop_id = supplink.Anode
                                 ftsupp.setSupportFlag(False)
-                        if ftsupp:
-                            if (ftsupp.Anode,ftsupp.Bnode) in self.fasttrips_walk_supplinks.keys():
-                                WranglerLogger.warn("(%d-(%d)-%d) already exists in walk_access_supplinks" % (ftsupp.Anode,supplink.Anode,ftsupp.Bnode))
-                                continue
-                            self.fasttrips_walk_supplinks[(ftsupp.Anode,ftsupp.Bnode)] = ftsupp
-                        else:
-                            continue
+                                new_fasttrips_walk_supplinks[(ftsupp.Anode,ftsupp.Bnode)] = ftsupp
+                        if new_fasttrips_walk_supplinks is not None: self.fasttrips_walk_supplinks = new_fasttrips_walk_supplinks
+#                         if ftsupp:
+#                             if (ftsupp.Anode,ftsupp.Bnode) in self.fasttrips_walk_supplinks.keys():
+#                                 WranglerLogger.warn("(%d-(%d)-%d) already exists in walk_access_supplinks" % (ftsupp.Anode,supplink.Anode,ftsupp.Bnode))
+#                                 continue
+#                             self.fasttrips_walk_supplinks[(ftsupp.Anode,ftsupp.Bnode)] = ftsupp
+#                         else:
+#                             continue
                     elif supplink.isDriveFunnel() or supplink.isTransitTransfer():
                         # drive funnel goes from pnr -> stop/station
                         # transit transfer goes from stop/station to stop/station or pnr <-> stop/station
@@ -862,24 +870,44 @@ class TransitNetwork(Network):
                         if (supplink.Anode, supplink.Bnode) in got_node_to_node_xfers:
                             continue
                         got_node_to_node_xfers.append((supplink.Anode,supplink.Bnode))
-                        from_lines, to_lines = [],[]
-                        for line in self.lines:
-                            if isinstance(line, TransitLine):
-                                stop_list = line.getStopList()
-                                if (supplink.Anode in stop_list) and (line.name not in from_lines): from_lines.append(line.name)
-                                if (supplink.Bnode in stop_list) and (line.name not in to_lines): to_lines.append(line.name)
-                        for from_line in from_lines:
-                            for to_line in to_lines:
-                                try:
-                                    ftsupp = FastTripsTransferSupplink(walkskims=walkskims,nodeToTaz=nodeToTaz,
-                                                                       maxTaz=maxTaz, from_route_id=from_line, to_route_id=to_line,
-                                                                       template=supplink)
-                                except NetworkException as e:
-                                    WranglerLogger.debug(str(e))
-                                    WranglerLogger.debug("Skipping walk access supplink (%d,%d)" % (supplink.Anode,supplink.Bnode,from_route_id,to_route_id))
-                                    continue
+                        if supplink.isTransitTransfer():
+                            from_lines, to_lines = [],[]
+                            for line in self.lines:
+                                if isinstance(line, TransitLine):
+                                    stop_list = line.getStopList()
+                                    if (supplink.Anode in stop_list) and (line.name not in from_lines): from_lines.append(line.name)
+                                    if (supplink.Bnode in stop_list) and (line.name not in to_lines): to_lines.append(line.name)
+                            for from_line in from_lines:
+                                for to_line in to_lines:
+                                    try:
+                                        ftsupp = FastTripsTransferSupplink(walkskims=walkskims,nodeToTaz=nodeToTaz,
+                                                                           maxTaz=maxTaz, from_route_id=from_line, to_route_id=to_line,
+                                                                           template=supplink)
+                                    except NetworkException as e:
+                                        WranglerLogger.debug(str(e))
+                                        WranglerLogger.debug("Skipping walk access supplink (%d,%d)" % (supplink.Anode,supplink.Bnode,from_line,to_line))
+                                        continue
+                                
+                                    self.fasttrips_transfer_supplinks[(ftsupp.Anode,ftsupp.Bnode,ftsupp.from_route_id,ftsupp.to_route_id)] = ftsupp
+                        elif supplink.isDriveFunnel():
+                            try:
+                                ftsupp = FastTripsTransferSupplink(walkskims=walkskims,nodeToTaz=nodeToTaz,
+                                                                   maxTaz=maxTaz,template=supplink)
+                                # since this is a drive funnel, one end is going to be a stop and other end is going to be a PNR lot
+                                if ftsupp.Anode in stop_list and ftsupp.Bnode not in stop_list:
+                                    ftsupp.setToStopID('lot_' + str(ftsupp.Bnode))
+                                    self.fasttrips_transfer_supplinks[(ftsupp.from_stop_id,ftsupp.to_stop_id)] = ftsupp
+                                    supplink.setSupportFlag(True)
+                                elif ftsupp.Anode not in stop_list and ftsupp.Bnode in stop_list:
+                                    ftsupp.setFromStopID('lot_' + str(ftsupp.Anode))
+                                    self.fasttrips_transfer_supplinks[(ftsupp.from_stop_id,ftsupp.to_stop_id)] = ftsupp
+                                    supplink.setSupportFlag(True)
+                                
+                            except NetworkException as e:
+                                WranglerLogger.debug(str(e))
+                                WranglerLogger.debug("Skipping drive funnel supplink (%d,%d)" % (supplink.Anode,supplink.Bnode))
+                                continue
                             
-                                self.fasttrips_transfer_supplinks[(ftsupp.Anode,ftsupp.Bnode,ftsupp.from_route_id,ftsupp.to_route_id)] = ftsupp
                                 
                     elif supplink.isDriveAccess() or supplink.isDriveEgress():
                         ftsupp = FastTripsDriveSupplink(hwyskims=hwyskims, pnrNodeToTaz=pnrNodeToTaz, tp=tp, template=supplink)
@@ -1417,14 +1445,14 @@ class TransitNetwork(Network):
                     pnr_nodenum = int(pnr.pnr)
                     #WranglerLogger.warn("Non-integer pnr node %s for pnr" % (str(pnr.pnr)
                 try:
-                    n = FastTripsNode(pnr_nodenum, coord_dict)
+                    n = FastTripsNode(pnr_nodenum, coord_dict, isPNR=True)
                 except:
                     WranglerLogger.warn('PNR Node %d not found; placing PNR at station location' % pnr_nodenum)
                     (x, y) = coord_dict[int(pnr.station)]
                     x += 10
                     y += 10
                     coord_dict_mod = {pnr_nodenum: (x, y)}
-                    n = FastTripsNode(pnr_nodenum, coord_dict_mod)
+                    n = FastTripsNode(pnr_nodenum, coord_dict_mod, isPNR=True)
                 self.fasttrips_pnrs[pnr_nodenum] = n
         # next, make psuedo-pnrs from drive-access links
 ##        for supplink in self.fasttrips_drive_supplinks.values():
@@ -1500,7 +1528,7 @@ class TransitNetwork(Network):
         pnr_data = []
         for pnr in self.fasttrips_pnrs.values():
             if not isinstance(pnr, FastTripsNode): continue
-            data = pnr.asList(['stop_id','stop_lat','stop_lon'])
+            data = pnr.asList(['lot_id','stop_lat','stop_lon'])
             pnr_data.append(data)
         df_pnrs = pd.DataFrame(columns=['lot_id','lot_lat','lot_lon'],data=pnr_data)
         df_pnrs = df_pnrs.drop_duplicates()
@@ -1581,6 +1609,9 @@ class TransitNetwork(Network):
 
         df_transfer_ft = pd.DataFrame(data=df_transfer,columns=transfer_keys+transfer_ft_columns)
         df_transfer = pd.DataFrame(data=df_transfer,columns=transfer_keys+transfer_columns)
+        # remove all the transfer to and from PNR lots in 'transfers.txt'
+        df_transfer = df_transfer.loc[(df_transfer['from_stop_id'].astype(str).str[:4] != 'lot_') & 
+                                      (df_transfer['to_stop_id'].astype(str).str[:4] != 'lot_'),]
         
         df_walk.to_csv(os.path.join(path,f_walk),index=False,headers=writeHeaders)
         df_drive.to_csv(os.path.join(path,f_drive),index=False,headers=writeHeaders)
@@ -1913,7 +1944,7 @@ class TransitNetwork(Network):
             if isinstance(line,str): continue
             for n in line.n:
                 if not isinstance(n,Node):
-                    if isinstance(n,int): raise NetworkExcetption('LINE %s HAS INTEGER NODE.  ALL NODES SHOULD BE OF TYPE NODE.' % line.name)
+                    if isinstance(n,int): raise NetworkException('LINE %s HAS INTEGER NODE.  ALL NODES SHOULD BE OF TYPE NODE.' % line.name)
                     continue
                 if int(n.num) not in nodes.keys():
                     ft_node = FastTripsNode(int(n.num), {abs(int(n.num)):(n.x,n.y)})

@@ -208,7 +208,7 @@ if __name__=='__main__':
             pnrZonesFile = os.path.join(MODEL_RUN_DIR,"PNR_ZONES.dbf")
             indbf = dbf.Dbf(os.path.join(MODEL_RUN_DIR,"PNR_ZONES.dbf"), readOnly=True, new=False)
             for rec in indbf:
-                pnrTAZtoNode[rec["PNRTAZ"]] = rec["PNRNODE"]
+                pnrTAZtoNode[rec["PNRTAZ"]] = 'lot_' + str(rec["PNRNODE"]).strip()
             indbf.close()
             pnrNodeToTAZ = dict((v,k) for k,v in pnrTAZtoNode.iteritems())
             #maxRealTAZ = min(pnrTAZtoNode.keys())-1

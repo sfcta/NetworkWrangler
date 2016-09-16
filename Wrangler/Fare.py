@@ -305,6 +305,10 @@ class FarelinksFare(Fare):
         
         for l in self.farelinks:
             for m in self.modes:
+                if not self.oneway:
+                    l_reverse = str(l.Bnode) + '-' + str(l.Anode)
+                    newfare = FarelinksFare(links=l_reverse, modes=m, price=self.price, tod=self.tod, start_time=self.start_time, end_time=self.end_time)
+                    farelist.append(newfare)
                 newfare = FarelinksFare(links=l, modes=m, price=self.price, tod=self.tod, start_time=self.start_time, end_time=self.end_time)
                 farelist.append(newfare)
 
