@@ -227,10 +227,10 @@ class FastTripsDriveSupplink(Supplink):
         # drive_access req'd
         if self.isDriveAccess():
             self.taz = self.Anode
-            self.lot_id = self.Bnode
+            self.lot_id = 'lot_' + str(self.Bnode) 
         elif self.isDriveEgress():
             self.taz = self.Bnode
-            self.lot_id = self.Anode
+            self.lot_id = 'lot_' + str(self.Anode)
         self.setDirection()
         self.dist = None        # float, miles
         self.cost = None        # integer, cents
@@ -312,3 +312,9 @@ class FastTripsTransferSupplink(FastTripsWalkSupplink):
         self.from_route_id = None
         self.to_route_id = None
         self.schedule_precedence = None # 'from' or 'to'
+    
+    def setFromStopID(self, stopid):
+        self.from_stop_id = stopid
+    
+    def setToStopID(self, stopid):
+        self.to_stop_id = stopid

@@ -1135,7 +1135,7 @@ class FastTripsTransitLine(TransitLine):
         cum_dist = 0
         track_dist = True
         seq = 1
-        if writeHeaders: f.write('shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n')
+        if writeHeaders: f.write('shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n')
         
         for a, b in zip(self.n[:-1],self.n[1:]):
             if not isinstance(a, Node) or not isinstance(b, Node):
@@ -1144,11 +1144,11 @@ class FastTripsTransitLine(TransitLine):
                 raise NetworkException(ex)
             else:
                 a_node, b_node = abs(int(a.num)), abs(int(b.num))
-                f.write('%s,%f,%f,%d,%f\n' % (self.name, a.stop_lat ,a.stop_lon, seq, cum_dist))
+                f.write('%s,%f,%f,%d\n' % (self.name, a.stop_lat ,a.stop_lon, seq))
                 seq += 1
                 
         # write the last node
-        f.write('%s,%f,%f,%d,%f\n' % (self.name, self.n[-1].stop_lat, self.n[-1].stop_lon, seq, cum_dist))
+        f.write('%s,%f,%f,%d\n' % (self.name, self.n[-1].stop_lat, self.n[-1].stop_lon, seq))
 
     def addFares(self, od_fares=None, xf_fares=None, farelinks_fares=None, price_conversion=1):
         TransitLine.addFares(self, od_fares,xf_fares,farelinks_fares)
