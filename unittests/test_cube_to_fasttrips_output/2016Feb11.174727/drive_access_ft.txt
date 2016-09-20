@@ -1,1 +1,0 @@
-taz,lot_id,direction,dist,cost,travel_time,start_time,end_time

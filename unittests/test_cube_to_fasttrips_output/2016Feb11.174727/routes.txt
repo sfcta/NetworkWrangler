@@ -1,7 +1,0 @@
-route_id,agency_id,route_short_name,route_long_name,route_type
-TNT_A_EB,tntransit,A,A_EB,3
-TNT_A_WB,tntransit,A,A_WB,3
-TNT_B_EB,tntransit,B,B_EB,3
-TNT_B_WB,tntransit,B,B_WB,3
-TNT_C_NB,tntransit,C,C_NB,2
-TNT_C_SB,tntransit,C,C_SB,2

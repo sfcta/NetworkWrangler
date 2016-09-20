@@ -1,7 +1,0 @@
-route_id,mode,fare_class,proof_of_payment
-TNT_A_EB,local_bus,tntransit_local_bus_allday,0
-TNT_A_WB,local_bus,tntransit_local_bus_allday,0
-TNT_B_EB,express_bus,tntransit_express_bus_allday,0
-TNT_B_WB,express_bus,tntransit_express_bus_allday,0
-TNT_C_NB,heavy_rail,tntransit_heavy_rail_allday,0
-TNT_C_SB,heavy_rail,tntransit_heavy_rail_allday,0
