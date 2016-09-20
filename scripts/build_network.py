@@ -438,12 +438,8 @@ if __name__ == '__main__':
         Wrangler.WranglerLogger.info("Checking out %s networks" % netmode)
         clonedcount = 0
         for project in NETWORK_PROJECTS[netmode]:
-            (project_name, projType, tag, kwargs) = getProjectAttributes(project)
-            
-            Wrangler.WranglerLogger.debug('PROJECT ATTRIBUTES--- project_name: %s -- project_type: %s -- tag: %s -- kwargs: %s' % (project_name, projType, tag, str(kwargs)))
-            if project_name == 'RegionalBus':
-                raw_input('RegionalBus.  Continue...')
-
+            (project_name, projType, tag, kwargs) = getProjectAttributes(project)          
+##            Wrangler.WranglerLogger.debug('PROJECT ATTRIBUTES--- project_name: %s -- project_type: %s -- tag: %s -- kwargs: %s' % (project_name, projType, tag, str(kwargs)))
             if tag == None: tag = TAG
             
             # test mode - don't use TAG for TEST_PROJECTS
