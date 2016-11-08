@@ -776,10 +776,9 @@ class FastTripsTransitLine(TransitLine):
         # info for crosswalk between SF-CHAMP and GTFS-PLUS
         self.champ_direction_id = None
         # info for crosswalk between agency published GTFS and GTFS-PLUS
-        self.gtfs_agency_id = None
-        self.gtfs_route_id  = None
         self.gtfs_vintage   = None
-        self.gtfs_url       = None
+
+        self.fasttrips_fares = None
 
         self.setRouteInfoFromLineName()
         self.setRouteType()
