@@ -165,7 +165,7 @@ class FastTripsWalkSupplink(Supplink):
         self.taz = self.Anode
         self.stop_id = self.Bnode
         self.dist = float(self['DIST'])*0.01 if 'DIST' in self.keys() else None
-        
+        #self.direction = 'access' # placeholder variable for v0.3 (maybe?)
         # walk_access optional
         if walkskims and nodeToTaz and maxTaz:
             self.setAttributes(walkskims,nodeToTaz,maxTaz)
@@ -176,6 +176,14 @@ class FastTripsWalkSupplink(Supplink):
             self.employment_density = None
             self.auto_capacity = None
             self.indirectness = None
+            # these enable reversing the supplink without having to pass walkskims again.  
+            # Reverse all the attributes in case the reverse path is a different route.
+            self._reverse_dist = self.dist
+            self._reverse_elevation_gain = None
+            self._reverse_population_density = None
+            self._reverse_retail_density = None
+            self._reverse_auto_capacity = None
+            self._reverse_indirectness = None
         
     def asDataFrame(self, columns=None):
         if columns is None:
@@ -220,6 +228,24 @@ class FastTripsWalkSupplink(Supplink):
         self.elevation_gain     = walkskims.getWalkSkimAttribute(oTaz,dTaz,"ABS_RISE")   # link sum when rise > 0 (feet)
         self.indirectness       = max(walkskims.getWalkSkimAttribute(oTaz,dTaz,"INDIRECTNESS"),1) # distance divided by rock dove distance, force to be 1 if the skim distance is less than straight-line
         
+        self._reverse_dist               = walkskims.getWalkSkimAttribute(dTaz,oTaz,"DISTANCE") if self.dist == None else self.dist  # link sum (miles).  Keep the original distance if it's available.
+        #self.dist = max(self.dist, 0.01)
+        self._reverse_population_density = walkskims.getWalkSkimAttribute(dTaz,oTaz,"AVGPOPDEN")  # average pop/acre
+        self._reverse_employment_density = walkskims.getWalkSkimAttribute(dTaz,oTaz,"AVGEMPDEN")  # average employment/acre
+        self._reverse_retail_density     = None #walkSkim.getWalkSkimAttribute(oTaz,dTaz,"AVGRETDEN")  # average retail/acre
+        self._reverse_auto_capacity      = walkskims.getWalkSkimAttribute(dTaz,oTaz,"AVGCAP")     # average road capacity (vph)
+        self._reverse_elevation_gain     = walkskims.getWalkSkimAttribute(dTaz,oTaz,"ABS_RISE")   # link sum when rise > 0 (feet)
+        self._reverse_indirectness       = max(walkskims.getWalkSkimAttribute(dTaz,oTaz,"INDIRECTNESS"),1) # distance divided by rock dove distance, force to be 1 if the skim distance is less than straight-line
+        
+    def reverse(self):
+        Supplink.reverse(self)
+        self.dist = self._reverse_dist
+        self.population_density = self._reverse_population_density
+        self.employment_density = self._reverse_employment_density
+        self.retail_density = self._reverse_retail_density
+        self.auto_capacity = self._reverse_auto_capacity
+        self.elevation_gain = self._reverse_elevation_gain
+        self.indirectness = self._reverse_indirectness
     
 class FastTripsDriveSupplink(Supplink):
     def __init__(self, hwyskims=None, pnrNodeToTaz=None, tp=None, template=None):
@@ -309,8 +335,8 @@ class FastTripsTransferSupplink(FastTripsWalkSupplink):
         self.transfer_type = None       # 0-whatev,1-timed transfer,2-min xfer time,3-not possible
         self.min_transfer_time = None   # float, minutes
         # transfer_ft req'd
-        self.from_route_id = None
-        self.to_route_id = None
+        self.from_route_id = from_route_id
+        self.to_route_id = to_route_id
         self.schedule_precedence = None # 'from' or 'to'
     
     def setFromStopID(self, stopid):
@@ -318,3 +344,9 @@ class FastTripsTransferSupplink(FastTripsWalkSupplink):
     
     def setToStopID(self, stopid):
         self.to_stop_id = stopid
+
+    def reverse(self):
+        FastTripsWalkSupplink.reverse(self)
+        temp = self.from_route_id
+        self.from_route_id = self.to_route_id
+        self.to_route_id = temp
