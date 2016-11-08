@@ -432,12 +432,15 @@ class FastTripsFare(Fare):
 
 class FastTripsTransferFare(XFFare):
     def __init__(self, from_fare_class=None, to_fare_class=None, transfer_fare_type=None,
-                 from_mode=None, to_mode=None, price=None, price_conversion=1):
-        XFFare.__init__(self, from_mode=from_mode, to_mode=to_mode, price=price, price_conversion=price_conversion)
+                 from_mode=None, to_mode=None, transfer_fare=None, price_conversion=1):
+        # TODO handle conditions where transfer_fare_type is not an incremental cost
+        XFFare.__init__(self, from_mode=from_mode, to_mode=to_mode, price=transfer_fare, price_conversion=price_conversion)
         self.from_fare_class = from_fare_class
         self.to_fare_class = to_fare_class
         self.transfer_fare_type = transfer_fare_type if transfer_fare_type else 'transfer_free'
-        self.transfer_fare = price
+        self.transfer_fare = transfer_fare
+        if self.transfer_fare_type == 'transfer_cost' and self.transfer_fare == 0:
+            self.transfer_fare_type == 'transfer_free'
             
     def asDataFrame(self, columns):
         if columns is None:

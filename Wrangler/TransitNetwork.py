@@ -902,6 +902,8 @@ class TransitNetwork(Network):
                                         continue
                                 
                                     self.fasttrips_transfer_supplinks[(ftsupp.Anode,ftsupp.Bnode,ftsupp.from_route_id,ftsupp.to_route_id)] = ftsupp
+                                    ftsupp.reverse()
+                                    self.fasttrips_transfer_supplinks[(ftsupp.Bnode,ftsupp.Anode,ftsupp.to_route_id,ftsupp.from_route_id)] = ftsupp
                         elif supplink.isDriveFunnel():
                             try:
                                 ftsupp = FastTripsTransferSupplink(walkskims=walkskims,nodeToTaz=nodeToTaz,
@@ -1937,8 +1939,8 @@ class TransitNetwork(Network):
                                                        to_fare_class=to_fare,
                                                        from_mode=xffare.from_mode,
                                                        to_mode=xffare.to_mode,
-                                                       is_flat_fee=1,
-                                                       transfer_rule=xffare.price,
+                                                       transfer_fare_type='transfer_cost',
+                                                       transfer_fare=xffare.price,
                                                        price_conversion=price_conversion)
                         ##if ftfare not in self.fasttrips_transfer_fares:
                         self.fasttrips_transfer_fares.append(ftfare)
