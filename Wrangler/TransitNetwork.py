@@ -779,12 +779,12 @@ class TransitNetwork(Network):
                 f = open(os.path.join(path,filename))
                 tp = filename[:2].upper()
                 supplinks = self.parseSupplinks(f.read(),production='transit_file',verbosity=0)
-                # only need to get walk supplinks for AM since they are the same in all time periods.
+                # only need to get walk and xfer supplinks for AM since they are the same in all time periods.
                 if walk_am_only and tp != "AM":
                     walk_removed = []
                     for s in supplinks:
                         if isinstance(s,Supplink):
-                            if s.isWalkAccess() or s.isWalkEgress() or s.isWalkFunnel(): continue
+                            if s.isWalkAccess() or s.isWalkEgress() or s.isWalkFunnel() or s.isTransitTransfer(): continue
                             walk_removed.append(s)
                     WranglerLogger.debug("Skipped %d of %d supplinks in %s" % (len(supplinks)-len(walk_removed),len(supplinks),filename))
                     supplinks = walk_removed
