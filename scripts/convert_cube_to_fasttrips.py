@@ -230,10 +230,12 @@ if __name__=='__main__':
             WranglerLogger.debug('matching gtfs for %s using %s AND CROSSWALK %s ENCODING %s' % (agency, settings['path'], settings['crosswalk'], settings['gtfs_encoding']))
             #if agency == 'sf_muni': continue
             transit_network.matchLinesToGTFS2(gtfs_agency=agency,
-                                             gtfs_path=settings['path'],
-                                             gtfs_encoding=settings['gtfs_encoding'])
+                                              gtfs_path=settings['path'],
+                                              gtfs_encoding=settings['gtfs_encoding'],
+                                              stop_count_diff_threshold=settings['stop_count_diff_threshold'])
             transit_network.addDeparturesFromGTFS(agency=agency, gtfs_path=settings['path'], gtfs_encoding=settings['gtfs_encoding'])
-    
+    transit_network.gtfs_crosswalk.to_csv('gtfs_route_crosswalk.csv')
+    transit_network.gtfs_node_crosswalk.to_csv('gtfs_node_crosswalk.csv')
     WranglerLogger.debug("writing agencies")
     transit_network.writeFastTrips_Agencies(path=FT_OUTPATH)
     WranglerLogger.debug("writing calendar")
@@ -244,12 +246,19 @@ if __name__=='__main__':
     WranglerLogger.debug("writing lines")
     transit_network.writeFastTrips_Shapes(path=FT_OUTPATH)
     WranglerLogger.debug("writing routes")
-    transit_network.writeFastTrips_Routes(path=FT_OUTPATH)
+    try:
+        transit_network.writeFastTrips_Routes(path=FT_OUTPATH)
+    except Exception as e:
+        WranglerLogger.debug('failed writing routes: %s' % str(e))
+    transit_network.writeFastTrips_toCHAMP(path=FT_OUTPATH) # get rid of this later; it's duplicate.
     WranglerLogger.debug("writing stop times")
     transit_network.writeFastTrips_Trips(path=FT_OUTPATH)
     if do_fares:
-        WranglerLogger.debug("writing fares")
-        transit_network.writeFastTrips_Fares(path=FT_OUTPATH, sortFareRules=SORT_OUTPUTS)
+        try:
+            WranglerLogger.debug("writing fares")
+            transit_network.writeFastTrips_Fares(path=FT_OUTPATH, sortFareRules=SORT_OUTPUTS)
+        except Exception as e:
+            WranglerLogger.debug('failed writing fairs: %s' % str(e))
     WranglerLogger.debug("writing stops")
     transit_network.writeFastTrips_Stops(path=FT_OUTPATH)
     if do_highways:
