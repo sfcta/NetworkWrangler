@@ -165,7 +165,10 @@ class FastTripsWalkSupplink(Supplink):
         self.taz = self.Anode
         self.stop_id = self.Bnode
         self.dist = float(self['DIST'])*0.01 if 'DIST' in self.keys() else None
-        #self.direction = 'access' # placeholder variable for v0.3 (maybe?)
+        if self.isWalkAccess():
+            self.direction = 'access' # placeholder variable for v0.3 (maybe?)
+        elif self.isWalkEgress():
+            self.direction = 'egress'
         # walk_access optional
         if walkskims and nodeToTaz and maxTaz:
             self.setAttributes(walkskims,nodeToTaz,maxTaz)
@@ -184,17 +187,18 @@ class FastTripsWalkSupplink(Supplink):
             self._reverse_retail_density = None
             self._reverse_auto_capacity = None
             self._reverse_indirectness = None
+            self._reverse_direction = 'egress' if self.direction == 'access' else 'access'
         
     def asDataFrame(self, columns=None):
         if columns is None:
-            columns = ['taz','stop_id','dist','elevation_gain','population_density',
+            columns = ['taz','stop_id','direction','dist','elevation_gain','population_density',
                        'employment_density','retail_density','auto_capacity','indirectness']
         result = Supplink.asDataFrame(self, columns)
         return result
 
     def asList(self, columns=None):
         if columns is None:
-            columns = ['taz','stop_id','dist','elevation_gain','population_density',
+            columns = ['taz','stop_id','direction','dist','elevation_gain','population_density',
                        'employment_density','retail_density','auto_capacity','indirectness']
         result = Supplink.asList(self, columns)
         return result
@@ -239,13 +243,32 @@ class FastTripsWalkSupplink(Supplink):
         
     def reverse(self):
         Supplink.reverse(self)
-        self.dist = self._reverse_dist
-        self.population_density = self._reverse_population_density
-        self.employment_density = self._reverse_employment_density
-        self.retail_density = self._reverse_retail_density
-        self.auto_capacity = self._reverse_auto_capacity
-        self.elevation_gain = self._reverse_elevation_gain
-        self.indirectness = self._reverse_indirectness
+        dist = self.dist
+        population_density                  = self.popultion_density
+        employment_density                  = self.employment_density
+        retail_density                      = self.retail_density
+        auto_capacity                       = self.auto_capacity
+        elevation_gain                      = self.elevation_gain
+        indirectness                        = self.indirectness
+        direction                           = self.direction
+        
+        self.dist                           = self._reverse_dist
+        self.population_density             = self._reverse_population_density
+        self.employment_density             = self._reverse_employment_density
+        self.retail_density                 = self._reverse_retail_density
+        self.auto_capacity                  = self._reverse_auto_capacity
+        self.elevation_gain                 = self._reverse_elevation_gain
+        self.indirectness                   = self._reverse_indirectness
+        self.direction                      = self._reverse_direction
+        
+        self._reverse_dist                  = dist
+        self._reverse_population_density    = population_density
+        self._reverse_employment_density    = employment_density
+        self._reverse_retail_density        = retail_density
+        self._reverse_auto_capacity         = auto_capacity
+        self._reverse_elevation_gain        = elevation_gain
+        self._reverse_indirectness          = indirectness
+        self._reverse_direction             = direction
     
 class FastTripsDriveSupplink(Supplink):
     def __init__(self, hwyskims=None, pnrNodeToTaz=None, tp=None, template=None):
