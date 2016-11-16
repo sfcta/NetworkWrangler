@@ -1573,7 +1573,7 @@ class TransitNetwork(Network):
                     vehicles.append(vtype)
         df_vehicles.to_csv(os.path.join(path,f),index=False,headers=writeHeaders)
 
-    def writeFastTrips_Access(self, f_walk='walk_access_ft.txt', f_drive='drive_access_ft.txt', f_transfer='transfers.txt', f_transfer_ft='transfers_ft.txt', path='.', writeHeaders=True):
+    def writeFastTrips_Access(self, f_walk='walk_access_ft.txt', f_drive='drive_access_ft.txt', f_transfer='transfers.txt', f_transfer_ft='transfers_ft.txt', path='.', writeHeaders=True, sort=True):
         df_walk = None
         df_drive = None
         df_transfer = None
@@ -1583,8 +1583,9 @@ class TransitNetwork(Network):
         walk_columns = ['taz','stop_id','dist','elevation_gain','population_density','employment_density','auto_capacity','indirectness']
         drive_columns = ['taz','lot_id','direction','dist','cost','travel_time','start_time','end_time']
         transfer_keys = ['from_stop_id','to_stop_id']
+        transfer_ft_keys = ['from_stop_id','to_stop_id','from_route_id','to_route_id']
         transfer_columns = ['transfer_type','min_transfer_time']
-        transfer_ft_columns = ['dist','from_route_id','to_route_id','schedule_precedence']
+        transfer_ft_columns = ['dist','schedule_precedence']
         
         for supplink in self.fasttrips_walk_supplinks.values():
             # skip the supplinks that end at WNR
@@ -1624,16 +1625,22 @@ class TransitNetwork(Network):
 
         if len(transfer_data) > 0:
             df_transfer = pd.DataFrame(columns=transfer_keys+transfer_columns+transfer_ft_columns, data=transfer_data)
-            df_transfer = df_transfer.drop_duplicates(subset=transfer_keys)
+            df_transfer = df_transfer.drop_duplicates(subset=transfer_ft_keys)
         else:
             df_transfer = pd.DataFrame(columns=transfer_columns)
 
-        df_transfer_ft = pd.DataFrame(data=df_transfer,columns=transfer_keys+transfer_ft_columns)
+        df_transfer_ft = pd.DataFrame(data=df_transfer,columns=transfer_ft_keys+transfer_ft_columns)
         df_transfer = pd.DataFrame(data=df_transfer,columns=transfer_keys+transfer_columns)
         # remove all the transfer to and from PNR lots in 'transfers.txt'
         df_transfer = df_transfer.loc[(df_transfer['from_stop_id'].astype(str).str[:4] != 'lot_') & 
                                       (df_transfer['to_stop_id'].astype(str).str[:4] != 'lot_'),]
         
+        if sort:
+            df_walk.sort_values(by=['taz','stop_id'], inplace=True)
+            df_drive.sort_values(by=['taz','lot_id'], inplace=True)
+            df_transfer.sort_values(by=[transfer_keys])
+            df_transfer_ft.sort_values(by=[transfer_ft_keys])
+            
         df_walk.to_csv(os.path.join(path,f_walk),index=False,headers=writeHeaders)
         df_drive.to_csv(os.path.join(path,f_drive),index=False,headers=writeHeaders)
         df_transfer.to_csv(os.path.join(path,f_transfer),index=False,headers=writeHeaders)
