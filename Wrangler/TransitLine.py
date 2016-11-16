@@ -768,7 +768,7 @@ class FastTripsTransitLine(TransitLine):
         self.proof_of_payment = None
 
         # routes_ft optional
-        self.fare_class = None
+        self.fare_period = None
 
         # trips req'd
         self.service_id     = None
@@ -873,20 +873,20 @@ class FastTripsTransitLine(TransitLine):
             self.mode = WranglerLookups.MODENUM_TO_FTMODETYPE[int(self.attr['MODE'])]
         return self.mode
 
-    def setFareClass(self, fare_class=None):
-        if fare_class:
-            self.fare_class = fare_class
-            return self.fare_class
+    def setFareClass(self, fare_period=None):
+        if fare_period:
+            self.fare_period = fare_period
+            return self.fare_period
         if self.fasttrips_fares:
             if len(self.fasttrips_fares) == 1:
-                self.fare_class = self.fasttrips_fares[0].fare_class
-                return self.fare_class
+                self.fare_period = self.fasttrips_fares[0].fare_period
+                return self.fare_period
         ft_fares = self.getFastTripsFares_asList()
         if len(ft_fares) == 1:
-            self.fare_class = ft_fares[0].fare_class
+            self.fare_period = ft_fares[0].fare_period
         else:
-            self.fare_class = None
-        return self.fare_class
+            self.fare_period = None
+        return self.fare_period
 
     def setProofOfPayment(self, proof_of_payment=None):
         if proof_of_payment:

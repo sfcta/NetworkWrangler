@@ -1624,7 +1624,7 @@ class TransitNetwork(Network):
 
         if len(transfer_data) > 0:
             df_transfer = pd.DataFrame(columns=transfer_keys+transfer_columns+transfer_ft_columns, data=transfer_data)
-            df_transfer = df_transfer.drop_duplicates()
+            df_transfer = df_transfer.drop_duplicates(subset=transfer_keys)
         else:
             df_transfer = pd.DataFrame(columns=transfer_columns)
 
@@ -1689,11 +1689,11 @@ class TransitNetwork(Network):
 
         for line in self.lines:
             if isinstance(line, TransitLine):
-                if line.fare_class == None:
+                if line.fare_period == None:
                     fc = line.setFareClass()
-                    WranglerLogger.debug('%s fare_class set to %s at writeFastTrips_Routes' % (line.name, fc))
+                    WranglerLogger.debug('%s fare_period set to %s at writeFastTrips_Routes' % (line.name, fc))
                 else:
-                    WranglerLogger.debug('%s fare_class already set as %s' % (line.name, line.fare_class))
+                    WranglerLogger.debug('%s fare_period already set as %s' % (line.name, line.fare_period))
                 df_row = line.asDataFrame(columns=['route_id','agency_id','route_short_name','route_long_name','route_type'])
                 if not isinstance(df_routes,pd.DataFrame):
                     df_routes = df_row
@@ -1908,35 +1908,35 @@ class TransitNetwork(Network):
         self.fasttrips_fares = fasttrips_fares
 
         count = 0
-        fare_classes = {} # fare_class -> FastTripsFare
-        fare_classes_by_mode = {} # champ modenum -> list of fare_class
+        fare_periods = {} # fare_period -> FastTripsFare
+        fare_periods_by_mode = {} # champ modenum -> list of fare_period
         
         for fare in self.fasttrips_fares:
-            if fare.fare_class not in fare_classes.keys():
-                fare_classes[fare.fare_class] = fare
+            if fare.fare_period not in fare_period.keys():
+                fare_period[fare.fare_period] = fare
             if not fare.champ_mode: WranglerLogger.warn("fare %s missing champ mode" % fare.fare_id)
-            if fare.champ_mode not in fare_classes_by_mode.keys(): fare_classes_by_mode[fare.champ_mode] = []
-            if fare.fare_class not in fare_classes_by_mode[fare.champ_mode]:
-                fare_classes_by_mode[fare.champ_mode].append(fare.fare_class)
+            if fare.champ_mode not in fare_periods_by_mode.keys(): fare_periods_by_mode[fare.champ_mode] = []
+            if fare.fare_period not in fare_periods_by_mode[fare.champ_mode]:
+                fare_periods_by_mode[fare.champ_mode].append(fare.fare_period)
 
         for xffare in self.xf_fares:
             if isinstance(xffare, XFFare):
                 if not xffare.isTransferType():
                     WranglerLogger.debug("skipping %d to %d because non-transit transfer" % (xffare.from_mode, xffare.to_mode))
                     continue
-                if xffare.from_mode not in fare_classes_by_mode.keys() or xffare.to_mode not in fare_classes_by_mode.keys():
+                if xffare.from_mode not in fare_periods_by_mode.keys() or xffare.to_mode not in fare_periods_by_mode.keys():
                     WranglerLogger.debug("skipping xfer %d to %d because no valid fares found" % (xffare.from_mode, xffare.to_mode))
                     continue
                 if xffare.price == 0:
                     WranglerLogger.debug("skipping xfer %d to %d because price is 0" % (xffare.from_mode, xffare.to_mode))
                     continue
-                from_classes = len(fare_classes_by_mode[xffare.from_mode])
-                to_classes = len(fare_classes_by_mode[xffare.to_mode])
+                from_periods = len(fare_periods_by_mode[xffare.from_mode])
+                to_periods = len(fare_periods_by_mode[xffare.to_mode])
                 WranglerLogger.debug("from_classes: %7d, to_classes: %7d, total combinations: %7d" % (from_classes,to_classes,from_classes*to_classes))
-                for from_fare in fare_classes_by_mode[xffare.from_mode]:
-                    for to_fare in fare_classes_by_mode[xffare.to_mode]:
-                        ftfare = FastTripsTransferFare(from_fare_class=from_fare,
-                                                       to_fare_class=to_fare,
+                for from_fare in fare_periods_by_mode[xffare.from_mode]:
+                    for to_fare in fare_periods_by_mode[xffare.to_mode]:
+                        ftfare = FastTripsTransferFare(from_fare_period=from_fare,
+                                                       to_fare_period=to_fare,
                                                        from_mode=xffare.from_mode,
                                                        to_mode=xffare.to_mode,
                                                        transfer_fare_type='transfer_cost',
@@ -1945,7 +1945,7 @@ class TransitNetwork(Network):
                         ##if ftfare not in self.fasttrips_transfer_fares:
                         self.fasttrips_transfer_fares.append(ftfare)
                         count += 1
-                        if count % 10000 == 0: WranglerLogger.debug("%7d" % count)
+                        if count % 10000 == 0: WranglerLogger.debug("found %7d transfer rules" % count)
         return fasttrips_fares, self.fasttrips_transfer_fares
 
     def createFastTrips_Nodes(self):
@@ -1988,7 +1988,7 @@ class TransitNetwork(Network):
                 df_farerules = df_row
             else:
                 df_farerules = df_farerules.append(df_row)
-            df_row = fare.asDataFrame(['fare_id','fare_class','start_time','end_time'])
+            df_row = fare.asDataFrame(['fare_id','fare_period','start_time','end_time'])
             if not isinstance(df_farerules_ft, pd.DataFrame):
                 df_farerules_ft = df_row
             else:
@@ -1998,7 +1998,7 @@ class TransitNetwork(Network):
                 df_fareattrs = df_row
             else:
                 df_fareattrs = df_fareattrs.append(df_row)
-            df_row = fare.asDataFrame(['fare_class','price','currency_type','payment_method','transfers','transfer_duration'])
+            df_row = fare.asDataFrame(['fare_period','price','currency_type','payment_method','transfers','transfer_duration'])
             if not isinstance(df_fareattrs_ft, pd.DataFrame):
                 df_fareattrs_ft = df_row
             else:
@@ -2008,7 +2008,7 @@ class TransitNetwork(Network):
             df_farerules = df_farerules.drop_duplicates().sort(['fare_id','route_id'])
             df_farerules_ft = df_farerules_ft.drop_duplicates().sort('fare_id')
             df_fareattrs = df_fareattrs.drop_duplicates().sort('fare_id')
-            df_fareattrs_ft = df_fareattrs_ft.drop_duplicates().sort('fare_class')
+            df_fareattrs_ft = df_fareattrs_ft.drop_duplicates().sort('fare_period')
         else:
             df_farerules = df_farerules.drop_duplicates()
             df_farerules_ft = df_farerules_ft.drop_duplicates()
@@ -2020,7 +2020,7 @@ class TransitNetwork(Network):
         df_fareattrs.to_csv(os.path.join(path,f_fareattr),index=False,header=writeHeaders,float_format='%.2f')
         df_fareattrs_ft.to_csv(os.path.join(path, f_fareattr_ft),index=False,header=writeHeaders,float_format='%.2f')
 
-        transfer_columns = ['from_fare_class','to_fare_class','is_flat_fee','transfer_rule']
+        transfer_columns = ['from_fare_period','to_fare_period','transfer_fare_type','transfer_fare']
         transfer_data = []
         
         for fare in self.fasttrips_transfer_fares:
