@@ -438,7 +438,7 @@ class FastTripsTransferFare(XFFare):
         self.from_fare_period = from_fare_period
         self.to_fare_period = to_fare_period
         self.transfer_fare_type = transfer_fare_type if transfer_fare_type else 'transfer_free'
-        self.transfer_fare = transfer_fare
+        self.transfer_fare = transfer_fare * price_conversion
         if self.transfer_fare_type == 'transfer_cost' and self.transfer_fare == 0:
             self.transfer_fare_type == 'transfer_free'
             
