@@ -165,10 +165,7 @@ class FastTripsWalkSupplink(Supplink):
         self.taz = self.Anode
         self.stop_id = self.Bnode
         self.dist = float(self['DIST'])*0.01 if 'DIST' in self.keys() else None
-        if self.isWalkAccess():
-            self.direction = 'access' # placeholder variable for v0.3 (maybe?)
-        elif self.isWalkEgress():
-            self.direction = 'egress'
+        self.setDirection()
         # walk_access optional
         if walkskims and nodeToTaz and maxTaz:
             self.setAttributes(walkskims,nodeToTaz,maxTaz)
@@ -202,7 +199,15 @@ class FastTripsWalkSupplink(Supplink):
                        'employment_density','retail_density','auto_capacity','indirectness']
         result = Supplink.asList(self, columns)
         return result
-    
+
+    def setDirection(self):
+        if self.isWalkAccess():
+            self.direction = 'access' # 'access' or 'egress'
+        elif self.isWalkEgress():
+            self.direction = 'egress'
+        else:
+            self.direction = None
+            
     def setAttributes(self, walkskims, nodeToTaz, maxTaz):
         if isinstance(walkskims, str):
             walkskims = WalkSkim(file_dir = walkskims)
@@ -240,11 +245,12 @@ class FastTripsWalkSupplink(Supplink):
         self._reverse_auto_capacity      = walkskims.getWalkSkimAttribute(dTaz,oTaz,"AVGCAP")     # average road capacity (vph)
         self._reverse_elevation_gain     = walkskims.getWalkSkimAttribute(dTaz,oTaz,"ABS_RISE")   # link sum when rise > 0 (feet)
         self._reverse_indirectness       = max(walkskims.getWalkSkimAttribute(dTaz,oTaz,"INDIRECTNESS"),1) # distance divided by rock dove distance, force to be 1 if the skim distance is less than straight-line
+        self._reverse_direction = 'egress' if self.direction == 'access' else 'access'
         
     def reverse(self):
         Supplink.reverse(self)
         dist = self.dist
-        population_density                  = self.popultion_density
+        population_density                  = self.population_density
         employment_density                  = self.employment_density
         retail_density                      = self.retail_density
         auto_capacity                       = self.auto_capacity
