@@ -152,7 +152,7 @@ if __name__=='__main__':
         WranglerLogger.debug("Making FarelinksFares unique")
         transit_network.makeFarelinksUnique()
         WranglerLogger.debug("creating zone ids")
-        transit_network.createFarelinksZones()
+        zone_to_nodes = transit_network.createFarelinksZones()
         nodeNames = getChampNodeNameDictFromFile(os.environ["CHAMP_node_names"])
         WranglerLogger.debug("Adding station names to OD Fares")
         transit_network.addStationNamestoODFares(nodeNames)
@@ -234,8 +234,8 @@ if __name__=='__main__':
                                               gtfs_encoding=settings['gtfs_encoding'],
                                               stop_count_diff_threshold=settings['stop_count_diff_threshold'])
             transit_network.addDeparturesFromGTFS(agency=agency, gtfs_path=settings['path'], gtfs_encoding=settings['gtfs_encoding'])
-    transit_network.gtfs_crosswalk.to_csv('gtfs_route_crosswalk.csv')
-    transit_network.gtfs_node_crosswalk.to_csv('gtfs_node_crosswalk.csv')
+        transit_network.gtfs_crosswalk.to_csv('gtfs_route_crosswalk.csv')
+        transit_network.gtfs_node_crosswalk.to_csv('gtfs_node_crosswalk.csv')
     WranglerLogger.debug("writing agencies")
     transit_network.writeFastTrips_Agencies(path=FT_OUTPATH)
     WranglerLogger.debug("writing calendar")
@@ -266,16 +266,26 @@ if __name__=='__main__':
         transit_network.writeFastTrips_PNRs(path=FT_OUTPATH)
     WranglerLogger.debug("Writing supplinks")
     transit_network.writeFastTrips_Access(path=FT_OUTPATH)
-
+    
+    
+    # TODO maybe zones should be handled in a more elegant way
+    f = open(os.path.join(FT_OUTPATH,'zones_ft.txt'), 'w')
+    f.write('zone_id,zone_lat,zone_lon\n')
+    for zone, nodes in zone_to_nodes.iteritems():
+        f.write('%s,0,0\n' % (zone))
+        
     print "writing FastTrips to CHAMP route name crosswalk"
     transit_network.writeFastTrips_toCHAMP(path=FT_OUTPATH)
     
     print "copying to csv for readability"
     os.mkdir(os.path.join(FT_OUTPATH,'csvs'))
-    for file in ['agency.txt','calendar.txt','drive_access_ft.txt','drive_access_points_ft.txt','fare_attributes.txt','fare_attributes_ft.txt','fare_rules.txt',
-                 'fare_rules_ft.txt','fare_transfer_rules_ft.txt','routes.txt','routes_ft.txt','shapes.txt','stop_times.txt','stop_times_ft.txt','stops.txt',
-                 'stops_ft.txt','transfers.txt','transfers_ft.txt','trips.txt','trips_ft.txt','vehicles_ft.txt','walk_access_ft.txt']:
-        shutil.copyfile(os.path.join(FT_OUTPATH,file),os.path.join(FT_OUTPATH,'csvs',file.replace('.txt','.csv')))
+    for f in ['agency.txt','calendar.txt','drive_access_ft.txt','drive_access_points_ft.txt','fare_attributes.txt','fare_attributes_ft.txt','fare_rules.txt',
+              'fare_periods_ft.txt','fare_transfer_rules_ft.txt','routes.txt','routes_ft.txt','shapes.txt','stop_times.txt','stop_times_ft.txt','stops.txt',
+              'stops_ft.txt','transfers.txt','transfers_ft.txt','trips.txt','trips_ft.txt','vehicles_ft.txt','walk_access_ft.txt']:
+        try:
+            shutil.copyfile(os.path.join(FT_OUTPATH,file),os.path.join(FT_OUTPATH,'csvs',f.replace('.txt','.csv')))
+        except Exception as e:
+            WranglerLogger.warn("failed to copy file %s to csv" % f)
         
     if test:
         print "testing"
