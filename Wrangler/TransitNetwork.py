@@ -831,18 +831,18 @@ class TransitNetwork(Network):
                     elif supplink.isWalkEgress():
                         pass
                         # egress links included in v0.3? If so, uncomment following...
-#                        # walk access may either be stop/station -> TAZ or PNR -> TAZ.  If it's the latter, flag it.
-#                        try:
-#                            ftsupp = FastTripsWalkSupplink(walkskims=walkskims,nodeToTaz=nodeToTaz,
-#                                                           maxTax=maxTaz, template=supplink)
-#                            if int(ftsupp.Anode) not in stop_list:
-#                                WranglerLogger.debug("setting node %s-%s to support link" % (ftsupp.Anode, ftsupp.Bnode))
-#                                ftsupp.setSupportFlag(True)
-#                        except Exception as e:
-#                            WranglerLogger.debug(str(e))
-#                            WranglerLogger.debug("Skipping walk access supplink (%d,%d)" % (supplink.Anode,supplink.Bnode))
-#                            continue
-#                        self.fasttrips_walk_supplinks[(ftsupp.Anode,ftsupp.Bnode)] = ftsupp
+                        # walk access may either be stop/station -> TAZ or PNR -> TAZ.  If it's the latter, flag it.
+                        try:
+                            ftsupp = FastTripsWalkSupplink(walkskims=walkskims,nodeToTaz=nodeToTaz,
+                                                           maxTaz=maxTaz, template=supplink)
+                            if int(ftsupp.Anode) not in stop_list:
+                                WranglerLogger.debug("setting node %s-%s to support link" % (ftsupp.Anode, ftsupp.Bnode))
+                                ftsupp.setSupportFlag(True)
+                        except Exception as e:
+                            WranglerLogger.debug(str(e))
+                            WranglerLogger.debug("Skipping walk access supplink (%d,%d)" % (supplink.Anode,supplink.Bnode))
+                            continue
+                        self.fasttrips_walk_supplinks[(ftsupp.Anode,ftsupp.Bnode)] = ftsupp
                     elif supplink.isWalkFunnel():
                         new_fasttrips_walk_supplinks = None
                         for k, s in self.fasttrips_walk_supplinks.iteritems():
@@ -902,6 +902,8 @@ class TransitNetwork(Network):
                                         continue
                                 
                                     self.fasttrips_transfer_supplinks[(ftsupp.Anode,ftsupp.Bnode,ftsupp.from_route_id,ftsupp.to_route_id)] = ftsupp
+                                    # flip the transfer link, because they are only one direction in CHAMP output, but need to be defined in 
+                                    # each direction for FastTrips
                                     ftsupp.reverse()
                                     self.fasttrips_transfer_supplinks[(ftsupp.Bnode,ftsupp.Anode,ftsupp.to_route_id,ftsupp.from_route_id)] = ftsupp
                         elif supplink.isDriveFunnel():
@@ -1607,7 +1609,7 @@ class TransitNetwork(Network):
         for supplink in self.fasttrips_transfer_supplinks.values():
             if supplink.support_flag: continue
             try:
-                transfer_data.append(supplink.asList(transfer_keys+transfer_columns+transfer_ft_columns))
+                transfer_data.append(supplink.asList(transfer_ft_keys+transfer_columns+transfer_ft_columns))
             except Exception as e:
                 WranglerLogger.warn(str(e))
 
@@ -1624,7 +1626,7 @@ class TransitNetwork(Network):
             df_drive = pd.DataFrame(columns=drive_columns)
 
         if len(transfer_data) > 0:
-            df_transfer = pd.DataFrame(columns=transfer_keys+transfer_columns+transfer_ft_columns, data=transfer_data)
+            df_transfer = pd.DataFrame(columns=transfer_ft_keys+transfer_columns+transfer_ft_columns, data=transfer_data)
             df_transfer = df_transfer.drop_duplicates(subset=transfer_ft_keys)
         else:
             df_transfer = pd.DataFrame(columns=transfer_columns)
@@ -1638,8 +1640,8 @@ class TransitNetwork(Network):
         if sort:
             df_walk.sort_values(by=['taz','stop_id'], inplace=True)
             df_drive.sort_values(by=['taz','lot_id'], inplace=True)
-            df_transfer.sort_values(by=[transfer_keys])
-            df_transfer_ft.sort_values(by=[transfer_ft_keys])
+            df_transfer.sort_values(by=transfer_keys, inplace=True)
+            df_transfer_ft.sort_values(by=transfer_ft_keys, inplace=True)
             
         df_walk.to_csv(os.path.join(path,f_walk),index=False,headers=writeHeaders)
         df_drive.to_csv(os.path.join(path,f_drive),index=False,headers=writeHeaders)
@@ -1919,8 +1921,8 @@ class TransitNetwork(Network):
         fare_periods_by_mode = {} # champ modenum -> list of fare_period
         
         for fare in self.fasttrips_fares:
-            if fare.fare_period not in fare_period.keys():
-                fare_period[fare.fare_period] = fare
+            if fare.fare_period not in fare_periods.keys():
+                fare_periods[fare.fare_period] = fare
             if not fare.champ_mode: WranglerLogger.warn("fare %s missing champ mode" % fare.fare_id)
             if fare.champ_mode not in fare_periods_by_mode.keys(): fare_periods_by_mode[fare.champ_mode] = []
             if fare.fare_period not in fare_periods_by_mode[fare.champ_mode]:
@@ -1939,7 +1941,7 @@ class TransitNetwork(Network):
                     continue
                 from_periods = len(fare_periods_by_mode[xffare.from_mode])
                 to_periods = len(fare_periods_by_mode[xffare.to_mode])
-                WranglerLogger.debug("from_classes: %7d, to_classes: %7d, total combinations: %7d" % (from_classes,to_classes,from_classes*to_classes))
+                WranglerLogger.debug("from_periods: %7d, to_periods: %7d, total combinations: %7d" % (from_periods,to_periods,from_periods*to_periods))
                 for from_fare in fare_periods_by_mode[xffare.from_mode]:
                     for to_fare in fare_periods_by_mode[xffare.to_mode]:
                         ftfare = FastTripsTransferFare(from_fare_period=from_fare,
@@ -1979,7 +1981,7 @@ class TransitNetwork(Network):
                     nodes[int(n.num)] = ft_node
         self.fasttrips_nodes = nodes
             
-    def writeFastTrips_Fares(self,f_farerules='fare_rules.txt',f_farerules_ft='fare_rules_ft.txt',
+    def writeFastTrips_Fares(self,f_farerules='fare_rules.txt',f_farerules_ft='fare_periods_ft.txt',
                              f_fareattr='fare_attributes.txt',f_fareattr_ft='fare_attributes_ft.txt',
                              f_faretransferrules='fare_transfer_rules_ft.txt',
                              path='.', writeHeaders=True, sortFareRules=False):
@@ -2076,6 +2078,8 @@ class TransitNetwork(Network):
         df_stops.to_csv(os.path.join(path,f_stops),index=False,header=writeHeaders)
         df_stops_ft.to_csv(os.path.join(path,f_stops_ft),index=False,header=writeHeaders)
         
+    def writeFastTrips_Zones(self,f_zones='zones_ft.txt', path='.', writeHeaders=True):
+        self
     def findSimpleDwellDelay(self, line):
         """
         Returns the simple mode/owner-based dwell delay for the given *line*.  This could
