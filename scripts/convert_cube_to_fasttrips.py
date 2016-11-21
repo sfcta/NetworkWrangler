@@ -283,7 +283,7 @@ if __name__=='__main__':
               'fare_periods_ft.txt','fare_transfer_rules_ft.txt','routes.txt','routes_ft.txt','shapes.txt','stop_times.txt','stop_times_ft.txt','stops.txt',
               'stops_ft.txt','transfers.txt','transfers_ft.txt','trips.txt','trips_ft.txt','vehicles_ft.txt','walk_access_ft.txt']:
         try:
-            shutil.copyfile(os.path.join(FT_OUTPATH,file),os.path.join(FT_OUTPATH,'csvs',f.replace('.txt','.csv')))
+            shutil.copyfile(os.path.join(FT_OUTPATH,f),os.path.join(FT_OUTPATH,'csvs',f.replace('.txt','.csv')))
         except Exception as e:
             WranglerLogger.warn("failed to copy file %s to csv" % f)
         
