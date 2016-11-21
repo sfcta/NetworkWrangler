@@ -162,10 +162,20 @@ class FastTripsWalkSupplink(Supplink):
     def __init__(self, walkskims=None, nodeToTaz=None, maxTaz=None, template=None):
         Supplink.__init__(self,template)
         # walk_access req'd
-        self.taz = self.Anode
-        self.stop_id = self.Bnode
-        self.dist = float(self['DIST'])*0.01 if 'DIST' in self.keys() else None
         self.setDirection()
+        if self.isWalkEgress():
+            self.taz = self.Bnode
+            self.stop_id = self.Anode
+        elif self.isWalkAccess():
+            self.taz = self.Anode
+            self.stop_id = self.Bnode
+        elif self.isTransitTransfer():
+            pass
+        elif self.isDriveFunnel() or self.isWalkFunnel():
+            self.setSupportFlag(True)
+            #WranglerLogger.warn("invalid supplink type %s for supplink (%d, %d)" % (self.mode, self.Anode, self.Bnode))
+        self.dist = float(self['DIST'])*0.01 if 'DIST' in self.keys() else None
+        
         # walk_access optional
         if walkskims and nodeToTaz and maxTaz:
             self.setAttributes(walkskims,nodeToTaz,maxTaz)
@@ -219,14 +229,19 @@ class FastTripsWalkSupplink(Supplink):
         elif self.Anode in nodeToTaz:
             oTaz = nodeToTaz[self.Anode]
         else:
-            raise NetworkException("Counldn't find TAZ for node %d in (%d, %d)" % (self.Anode,self.Anode,self.Bnode))
+            #print nodeToTaz
+            WranglerLogger.warn("Counldn't find TAZ for node %d in (%d, %d)" % (self.Anode,self.Anode,self.Bnode))
+            return
+            #raise NetworkException("Counldn't find TAZ for node %d in (%d, %d)" % (self.Anode,self.Anode,self.Bnode))
 
         if self.Bnode <= maxTaz:
             dTaz = self.Bnode
         elif self.Bnode in nodeToTaz:
             dTaz = nodeToTaz[self.Bnode]
         else:
-            raise NetworkException("Counldn't find TAZ for node %d in (%d, %d)" % (self.Bnode,self.Anode,self.Bnode))
+            WranglerLogger.warn("Counldn't find TAZ for node %d in (%d, %d)" % (self.Bnode,self.Anode,self.Bnode))
+            return
+            #raise NetworkException("Counldn't find TAZ for node %d in (%d, %d)" % (self.Bnode,self.Anode,self.Bnode))
         
         self.dist               = walkskims.getWalkSkimAttribute(oTaz,dTaz,"DISTANCE") if self.dist == None else self.dist  # link sum (miles).  Keep the original distance if it's available.
         #self.dist = max(self.dist, 0.01)
