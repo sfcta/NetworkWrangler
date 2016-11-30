@@ -392,5 +392,9 @@ class FastTripsTransferSupplink(FastTripsWalkSupplink):
     def reverse(self):
         FastTripsWalkSupplink.reverse(self)
         temp = self.from_route_id
+        self.from_stop_id = self.Anode
+        self.to_stop_id = self.Bnode
         self.from_route_id = self.to_route_id
         self.to_route_id = temp
+        if self.schedule_precedence == 'from': self.schedule_precedence = 'to'
+        if self.schedule_precedence == 'to': self.schedule_precedence = 'from'
