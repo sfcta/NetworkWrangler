@@ -151,6 +151,20 @@ class ODFare(Fare):
         if self.from_name and self.to_name: return True
         return False
     
+    def reverse(self):
+        temp = self.from_node
+        self.from_node = self.to_node
+        self.to_node = temp
+        temp = self.from_name
+        self.from_name = self.to_name
+        self.to_name = temp
+        self.setFareId()
+        
+    def get_reverse(self):
+        fare = copy.deepcopy(self)
+        fare.reverse()
+        return fare
+    
     def __repr__(self):
         s = str(self)
         return s
@@ -441,7 +455,10 @@ class FastTripsTransferFare(XFFare):
         self.transfer_fare = transfer_fare * price_conversion
         if self.transfer_fare_type == 'transfer_cost' and self.transfer_fare == 0:
             self.transfer_fare_type == 'transfer_free'
-            
+        if self.transfer_fare < 0 and self.transfer_fare_type == 'transfer_cost':
+            self.transfer_fare = -1.0 * self.transfer_fare
+            self.transfer_fare_type = 'transfer_discount'
+        
     def asDataFrame(self, columns):
         if columns is None:
             columns = ['from_fare_period','to_fare_period','is_flat_fee','transfer_rule']
