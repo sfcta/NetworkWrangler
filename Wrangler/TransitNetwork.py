@@ -805,9 +805,11 @@ class TransitNetwork(Network):
         total_supplinks = 0
         df_stops = self.getFastTrips_Stops_asDataFrame()
         stop_list = df_stops['stop_id'].tolist()
+
         for tp in WranglerLookups.ALL_TIMEPERIODS:
             total_supplinks += len(self.supplinks[tp])
             
+        # initialize lists to gather supplink data
         champ_walk_access_data  = [] # [taz, stop_id, pnr, direction, supplink]
         champ_walk_support_data = [] # [a, b, supplink]
         drive_access_data       = [] # [taz, pnr, tp, direction, supplink]
@@ -815,6 +817,7 @@ class TransitNetwork(Network):
         transit_transfer_node_data = [] # [a, b, tp, supplink]
         transit_transfer_line_data = [] # [a, b, from_line, to_line, tp, supplink]
         
+        # iterate over all supplinks and put them into list by type
         for tp in WranglerLookups.ALL_TIMEPERIODS:
             for supplink in self.supplinks[tp]:
                 counter += 1
@@ -865,28 +868,33 @@ class TransitNetwork(Network):
         # Transit Transfers
         WranglerLogger.debug("gathering lines for FastTripsTransferSupplinks")
         transit_transfer_node = pd.DataFrame(transit_transfer_node_data, columns=['a','b','tp','supplink']).drop_duplicates(subset=['a','b','tp'])
-        for idx, row in transit_transfer_node.iterrows():
-            from_lines, to_lines = [],[]
+        for idx, row in transit_transfer_node.iterrows():        
+            from_lines, to_lines = [],[]            
             for line in self.lines:
                 if isinstance(line, TransitLine):
-                    stop_list = line.getStopList()
-                    if (row['a'] in stop_list) and (line.getFreq(row['tp']) > 0):
+                    this_stop_list = line.getStopList()
+                    if row['a'] in this_stop_list:
                             from_lines.append(line.name)
-                    if (row['b'] in stop_list) and (line.getFreq(row['tp']) > 0):
+                    if row['b'] in this_stop_list:
                             to_lines.append(line.name)
-            from_lines = list(set(from_lines))
-            to_lines = list(set(to_lines))
             for from_line in from_lines:
                 for to_line in to_lines:
                     transit_transfer_line_data.append([row['a'],row['b'],from_line,to_line,tp,row['supplink']])
 
         transfers = pd.DataFrame(transit_transfer_line_data, columns=['a','b','from_line','to_line','tp','supplink']).drop_duplicates(subset=['a','b','from_line','to_line','tp'])
+        # drop records that don't have a valid stop at least one of a or b
+        transfers = transfers.loc[transfers['a'].isin(stop_list) | transfers['b'].isin(stop_list)]
+        # prepend 'lot_' for a or b when it's not a stop, because it's a pnr instead.
+        transfers.loc[(transfers['a'].isin(stop_list)) & (~transfers['b'].isin(stop_list)),'b'] = transfers['b'].map(lambda x: 'lot_' + str(x))
+        transfers.loc[(~transfers['a'].isin(stop_list)) & (transfers['b'].isin(stop_list)),'a'] = transfers['a'].map(lambda x: 'lot_' + str(x))
+        
         WranglerLogger.debug("done gathering lines, converting to FastTripsTransferSupplinks")
         transfers['ftsupp'] = transfers.apply(self.map_transit_transfer, axis=1, walkskims=walkskims, nodeToTaz=nodeToTaz, maxTaz=maxTaz)
         
         WranglerLogger.debug("reversing FastTripsTransferSupplinks")
         
         transfers['ftsupp_rev'] = transfers['ftsupp'].apply(self.map_rev_transfer)
+        transfers.to_csv('transfers_rev_supplinks.csv')
         WranglerLogger.debug("adding %d transfer supplinks to fasttrips_transfer_supplinks" % len(transfers))
         self.fasttrips_transfer_supplinks.extend(transfers['ftsupp'].tolist())
         WranglerLogger.debug('total transfer supplinks %d' % len(self.fasttrips_transfer_supplinks))
@@ -897,14 +905,12 @@ class TransitNetwork(Network):
         WranglerLogger.debug('creating FastTripsDriveSupplinks')
         drive_access = pd.DataFrame(drive_access_data, columns=['taz','pnr','tp','direction','supplink']).drop_duplicates(subset=['taz','pnr','tp','direction'])
         drive_access['ftsupp'] = drive_access.apply(self.map_drive_access, axis=1, hwyskims=hwyskims, pnrNodeToTaz=pnrNodeToTaz)
-        try:
-            self.fasttrips_drive_supplinks.extend(drive_access['ftsupp'].tolist())
-        except Exception as e:
-            print drive_access
-            print e
-            sys.exit(2)
+        self.fasttrips_drive_supplinks.extend(drive_access['ftsupp'].tolist())
         
         drive_support = pd.DataFrame(drive_support_data, columns=['a','b','tp','supplink']).drop_duplicates(subset=['a','b','tp'])
+        # drop records that don't have a valid stop at least one of a or b
+        drive_support = drive_support.loc[drive_support['a'].isin(stop_list) | drive_support['b'].isin(stop_list)]
+        # prepend 'lot_' for a or b when it's not a stop, because it's a pnr instead.
         drive_support.loc[drive_support['a'].isin(stop_list) & ~drive_support['b'].isin(stop_list),'b'] = drive_support['b'].map(lambda x: 'lot_' + str(x))
         drive_support.loc[~drive_support['a'].isin(stop_list) & drive_support['b'].isin(stop_list),'a'] = drive_support['a'].map(lambda x: 'lot_' + str(x))
         drive_support['ftsupp'] = drive_support.apply(self.map_drive_support, axis=1, walkskims=walkskims, nodeToTaz=nodeToTaz, maxTaz=maxTaz)
@@ -924,16 +930,18 @@ class TransitNetwork(Network):
         ftsupp = FastTripsTransferSupplink(walkskims=walkskims, nodeToTaz=nodeToTaz, maxTaz=maxTaz, template=row['supplink'])
         ftsupp.setToStopID(row['b'])
         ftsupp.setFromStopID(row['a'])
-        ftsupp.setSupportFlag(True)
         return ftsupp
         
     def map_transit_transfer(self, row, walkskims, nodeToTaz, maxTaz):
         ftsupp = FastTripsTransferSupplink(walkskims=walkskims, nodeToTaz=nodeToTaz, maxTaz=maxTaz, 
                                            from_route_id=row['from_line'], to_route_id=row['to_line'], template=row['supplink'])
+        ftsupp.setToStopID(row['b'])
+        ftsupp.setFromStopID(row['a'])
         return ftsupp
         
     def map_rev_transfer(self, row):
         ftsupp = copy.deepcopy(row)
+        ftsupp['ONEWAY'] = 'true'
         ftsupp.reverse()
         return ftsupp
         
@@ -1100,34 +1108,6 @@ class TransitNetwork(Network):
                 data.append(reverse_line.asList(cols))
                 reverse_lines.append(reverse_line)
         self.lines += reverse_lines
-##        direction_df = pd.DataFrame(data,columns=cols)
-##        # set direction ids; first get dataframe that will function as lookup for 
-##        direction_df['direction_id'] = np.nan
-##        direction_df.loc[direction_df['champ_direction_id'].isin(['O','WB','NB']),'direction_id'] = 0
-##        direction_df.loc[direction_df['champ_direction_id'].isin(['I','EB','SB']),'direction_id'] = 1
-##        unassigned = direction_df[pd.isnull(direction_df['direction_id'])]
-##        grouped = unassigned.groupby(['agency_id','route_id'])
-##
-##        for name, group in grouped:
-##            if len(group) > 2:
-##                raise NetworkException('%s (%s) trying to assign direction id to route with more than 2 directions' % (name[1], group['name']))
-##            elif len(group) > 1:
-##                WranglerLogger.debug('%s (%s) setting direction_id = 0' % (name[1], group.loc[group.index[0],'name']))
-##                WranglerLogger.debug('%s (%s) setting direction_id = 1' % (name[1], group.loc[group.index[1],'name']))
-##                direction_df.loc[group.index[0],'direction_id'] = 0
-##                direction_df.loc[group.index[1],'direction_id'] = 1
-##            else:
-##                WranglerLogger.debug('%s (%s) only one direction, setting direction_id = 0' % (name[1], group['name']))
-##                direction_df.loc[group.index[0],'direction_id'] = 0
-##
-##        direction_df.to_csv('direction_lookup.csv')
-##        # check validity of lines
-##        for line in self.lines:
-##            if not isinstance(line, FastTripsTransitLine) and not isinstance(line, str):
-##                raise NetworkException('failed to convert')
-##            if isinstance(line, FastTripsTransitLine):
-##                direction_id = direction_df.loc[(direction_df['agency_id']==line.agency_id) & (direction_df['name']==line.name),'direction_id'].irow(0)
-##                line.setDirectionId(direction_id)
             
     def makeFarelinksUnique(self):
         '''
@@ -1559,28 +1539,6 @@ class TransitNetwork(Network):
                 else:
                     WranglerLogger.debug("ROUTE ID %s: Setting departure times from GTFS" % line.name)
                     line.setDepartures(list_of_departure_times)
-                    
-##    def addDeparturesFromGTFS(self, gtfs_path, crosswalk):
-##        import gtfs_utils
-##        gtfs = gtfs_utils.GTFSFeed(gtfs_path)
-##        gtfs.load()
-##        gtfs.build_common_dfs()
-##        crosswalk = pd.read_csv(crosswalk)
-##        gtfs.route_trips.to_csv('route_trips.csv')
-##        
-##        for line in self.lines:
-##            if isinstance(line, str):
-##                pass
-##            elif isinstance(line, TransitLine):
-##                list_of_pattern_ids = crosswalk[crosswalk['CHAMP ROUTE ID']==line.name]['pattern_id'].drop_duplicates().tolist()
-##                list_of_departure_times = gtfs.route_trips[gtfs.route_trips['pattern_id'].isin(list_of_pattern_ids)]['trip_departure_mpm'].tolist()
-##                if len(list_of_departure_times) == 0:
-##                    WranglerLogger.warn("ROUTE ID %s: No GTFS departure times for, calculating from headways" % line.name)
-##                    line.setDeparturesFromHeadways()
-##                    WranglerLogger.warn("ROUTE ID %s: added %d departures" % (line.name, len(line.all_departure_times)))
-##                else:
-##                    WranglerLogger.debug("ROUTE ID %s: Setting departure times from GTFS" % line.name)
-##                    line.setDepartures(list_of_departure_times)
                             
     def addTravelTimes(self, highway_networks):
         '''
@@ -1775,11 +1733,12 @@ class TransitNetwork(Network):
 
         df_transfer_ft = pd.DataFrame(data=df_transfer,columns=transfer_ft_keys+transfer_ft_columns)
         df_transfer = pd.DataFrame(data=df_transfer,columns=transfer_keys+transfer_columns)
+        df_transfer_withPNR = copy.deepcopy(df_transfer)
         # remove all the transfer to and from PNR lots in 'transfers.txt'
         df_transfer = df_transfer.loc[(df_transfer['from_stop_id'].astype(str).str[:4] != 'lot_') & 
                                       (df_transfer['to_stop_id'].astype(str).str[:4] != 'lot_'),]
         df_transfer.drop_duplicates(subset=transfer_keys, inplace=True)
-        
+        df_transfer_withPNR.drop_duplicates(subset=transfer_keys, inplace=True)
         if sort:
             df_walk.sort_values(by=['taz','stop_id'], inplace=True)
             df_drive.sort_values(by=['taz','lot_id'], inplace=True)
@@ -1789,6 +1748,7 @@ class TransitNetwork(Network):
         df_walk.to_csv(os.path.join(path,f_walk),index=False,headers=writeHeaders)
         df_drive.to_csv(os.path.join(path,f_drive),index=False,headers=writeHeaders)
         df_transfer.to_csv(os.path.join(path,f_transfer),index=False,headers=writeHeaders)
+        df_transfer_withPNR.to_csv(os.path.join(path,'transfers_withPNR.txt'), index=False, headers=writeHeaders)
         df_transfer_ft.to_csv(os.path.join(path,f_transfer_ft),index=False,headers=writeHeaders)
             
     def writeFastTrips_Shapes(self, f='shapes.txt', path='.', writeHeaders=True):
@@ -1999,9 +1959,15 @@ class TransitNetwork(Network):
         '''
         This is a function added for fast-trips.
         '''
+        # od_fares are assymetrical, so need to reverse them
+        od_fares = []
+        for f in self.od_fares:
+            if isinstance(f, ODFare):
+                od_fares.append(f)
+                od_fares.append(f.get_reverse())
         for line in self.lines:
             if isinstance(line, TransitLine):
-                line.addFares(od_fares=self.od_fares, xf_fares=self.xf_fares, farelinks_fares=self.farelinks_fares)
+                line.addFares(od_fares=od_fares, xf_fares=self.xf_fares, farelinks_fares=self.farelinks_fares)
                 
     def createFastTrips_Fares(self, price_conversion=1):
         '''
