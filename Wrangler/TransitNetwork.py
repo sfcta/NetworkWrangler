@@ -810,7 +810,7 @@ class TransitNetwork(Network):
             total_supplinks += len(self.supplinks[tp])
             
         # initialize lists to gather supplink data
-        champ_walk_access_data  = [] # [taz, stop_id, pnr, direction, supplink]
+        champ_walk_access_data  = [] # [taz, stop_id, direction, supplink]
         champ_walk_support_data = [] # [a, b, supplink]
         drive_access_data       = [] # [taz, pnr, tp, direction, supplink]
         drive_support_data      = [] # [a, b, tp, supplink]
@@ -824,10 +824,10 @@ class TransitNetwork(Network):
                 if isinstance(supplink, Supplink):
                     if supplink.isWalkAccess():
                         if tp != 'AM': continue
-                        champ_walk_access_data.append([supplink.Anode, supplink.Bnode, np.nan, 'access', supplink])
+                        champ_walk_access_data.append([supplink.Anode, supplink.Bnode, 'access', supplink])
                     elif supplink.isWalkEgress():
                         if tp != 'AM': continue
-                        champ_walk_access_data.append([supplink.Bnode, supplink.Anode, np.nan, 'egress', supplink])
+                        champ_walk_access_data.append([supplink.Bnode, supplink.Anode, 'egress', supplink])
                     elif supplink.isWalkFunnel():
                         if tp != 'AM': continue
                         champ_walk_support_data.append([supplink.Anode, supplink.Bnode, supplink])
@@ -835,12 +835,34 @@ class TransitNetwork(Network):
                         # transit transfer goes from stop/station to stop/station or pnr <-> stop/station
                         transit_transfer_node_data.append([supplink.Anode,supplink.Bnode, tp, supplink])
                     elif supplink.isDriveAccess():
+                        # if it is a drive access directly to a stop node, then need the access link to go to a 'lot_'+stop_id
+                        # and then a transfer link between the 'lot_'+stop_id and the stop_id
+                        if supplink.Bnode in stop_list:
+                            s = Supplink()
+                            s.id = 'lot_%d-%d' % (supplink.Bnode, supplink.Bnode)
+                            s.Anode = 'lot_%d' % (supplink.Bnode)
+                            s.Bnode = supplink.Bnode
+                            s.setMode(6)
+                            drive_support_data.append(['lot_%d' % supplink.Bnode, supplink.Bnode, tp, s])
                         drive_access_data.append([supplink.Anode, supplink.Bnode, tp, 'access', supplink])
                     elif supplink.isDriveEgress():
+                        # if it is a drive access directly to a stop node, then need the access link to go to a 'lot_'+stop_id
+                        # and then a transfer link between the 'lot_'+stop_id and the stop_id
+                        if supplink.Anode in stop_list:
+                            s = Supplink()
+                            s.id = '%d-lot_%d' % (supplink.Anode, supplink.Anode)
+                            s.Anode = supplink.Anode
+                            s.Bnode = 'lot_%d' % (supplink.Anode)                            
+                            s.setMode(6)
+                            drive_support_data.append([supplink.Anode, 'lot_%d' % supplink.Anode, tp, s])
                         drive_access_data.append([supplink.Bnode, supplink.Anode, tp, 'egress', supplink])
                     elif supplink.isDriveFunnel():
                         # drive funnel goes from pnr -> stop/station.  It is considered a transfer in FastTrips
-                        drive_support_data.append([supplink.Anode, supplink.Bnode, tp, supplink])
+                        drive_support_data.append(['lot_%d' % supplink.Anode, supplink.Bnode, tp, supplink])
+                        s = copy.deepcopy(supplink)
+                        s['ONEWAY'] = 'true'
+                        s.reverse()
+                        drive_support_data.append([s.Anode, 'lot_%d' % s.Bnode, tp, s])
                     else:
                         WranglerLogger.debug('unknown supplink type %s' % str(supplink))
                 if counter % 10000 == 0:
@@ -849,19 +871,17 @@ class TransitNetwork(Network):
 
         # Walk access        
         WranglerLogger.debug("merging walk access/egress with funnels")
-        champ_walk_access = pd.DataFrame(champ_walk_access_data, columns=['taz','stop_id','pnr','direction','supplink']).drop_duplicates(subset=['taz','stop_id','direction'])
-        champ_walk_access.loc[~champ_walk_access['stop_id'].isin(stop_list),'pnr'] = champ_walk_access['stop_id']
-        champ_walk_access.loc[pd.notnull(champ_walk_access['pnr']),'stop_id'] = np.nan
+        champ_walk_access = pd.DataFrame(champ_walk_access_data, columns=['taz','stop_id','direction','supplink']).drop_duplicates(subset=['taz','stop_id','direction'])
         champ_walk_support = pd.DataFrame(champ_walk_support_data, columns=['a','b','supplink']).drop_duplicates(subset=['a','b'])
-        pre_access = pd.DataFrame(champ_walk_access) # set aside to retrieve 'direction' and 'supplink' columns
-        champ_walk_access = pd.merge(champ_walk_access.loc[:,['taz','stop_id','pnr']], champ_walk_support.loc[:,['a','b']].set_index('a'), how='left', left_on='pnr', right_index=True)
-        champ_walk_access = pd.merge(champ_walk_access, champ_walk_support.loc[:,['a','b']].set_index('b'), how='left', left_on='pnr', right_index=True)
-        champ_walk_access = pd.merge(champ_walk_access, pre_access, on=['taz','stop_id','pnr']).set_index(['taz','stop_id','pnr']).reset_index()
-        del pre_access
-        champ_walk_access.loc[pd.isnull(champ_walk_access['stop_id']), 'stop_id'] = champ_walk_access[['a','b']].max(axis=1)
-
+        champ_walk_access.loc[champ_walk_access['stop_id'].isin(champ_walk_support['a'].tolist()+champ_walk_support['b'].tolist()),'wnr'] = champ_walk_access['stop_id']
+        champ_walk_access = pd.merge(champ_walk_access.loc[:,['taz','stop_id','direction','wnr','supplink']], champ_walk_support.loc[:,['a','b']].set_index('a'), how='left', left_on='wnr', right_index=True)
+        champ_walk_access = pd.merge(champ_walk_access, champ_walk_support.loc[:,['a','b']].set_index('b'), how='left', left_on='wnr', right_index=True)
+        champ_walk_access = champ_walk_access.set_index('taz').reset_index()
+        champ_walk_access.loc[pd.notnull(champ_walk_access['wnr']), 'stop_id'] = champ_walk_access[['a','b']].max(axis=1)
+        print "walk access links have %d records for 16512" % len(champ_walk_access.loc[champ_walk_access['stop_id'].eq(16512)])        
+        print champ_walk_access.loc[champ_walk_access['stop_id'].eq(16512)]
         WranglerLogger.debug("creating FastTripsWalkSupplinks")
-        champ_walk_access['ftsupp'] = champ_walk_access.apply(self.map_walk_access, axis=1, walkskims=walkskims, nodeToTaz=nodeToTaz, maxTaz=maxTaz)
+        champ_walk_access['ftsupp'] = champ_walk_access.apply(self.map_walk_access, axis=1, walkskims=walkskims, nodeToTaz=nodeToTaz, maxTaz=maxTaz, update_stop_id=True)
         self.fasttrips_walk_supplinks.extend(champ_walk_access['ftsupp'].tolist())
         
         del champ_walk_access, champ_walk_support, champ_walk_access_data, champ_walk_support_data
@@ -885,8 +905,10 @@ class TransitNetwork(Network):
         # drop records that don't have a valid stop at least one of a or b
         transfers = transfers.loc[transfers['a'].isin(stop_list) | transfers['b'].isin(stop_list)]
         # prepend 'lot_' for a or b when it's not a stop, because it's a pnr instead.
-        transfers.loc[(transfers['a'].isin(stop_list)) & (~transfers['b'].isin(stop_list)),'b'] = transfers['b'].map(lambda x: 'lot_' + str(x))
-        transfers.loc[(~transfers['a'].isin(stop_list)) & (transfers['b'].isin(stop_list)),'a'] = transfers['a'].map(lambda x: 'lot_' + str(x))
+        #transfers.loc[(transfers['a'].isin(stop_list)) & (~transfers['b'].isin(stop_list)),'b'] = transfers['b'].map(lambda x: 'lot_' + str(x))
+        #transfers.loc[(~transfers['a'].isin(stop_list)) & (transfers['b'].isin(stop_list)),'a'] = transfers['a'].map(lambda x: 'lot_' + str(x))
+        transfers.loc[transfers['a'].isin(self.fasttrips_pnrs.keys()) & ~transfers['a'].isin(stop_list),'a'] = transfers['a'].map(lambda x: 'lot_' + str(x))
+        transfers.loc[transfers['b'].isin(self.fasttrips_pnrs.keys()) & ~transfers['b'].isin(stop_list),'b'] = transfers['b'].map(lambda x: 'lot_' + str(x))
         
         WranglerLogger.debug("done gathering lines, converting to FastTripsTransferSupplinks")
         transfers['ftsupp'] = transfers.apply(self.map_transit_transfer, axis=1, walkskims=walkskims, nodeToTaz=nodeToTaz, maxTaz=maxTaz)
@@ -909,17 +931,23 @@ class TransitNetwork(Network):
         
         drive_support = pd.DataFrame(drive_support_data, columns=['a','b','tp','supplink']).drop_duplicates(subset=['a','b','tp'])
         # drop records that don't have a valid stop at least one of a or b
-        drive_support = drive_support.loc[drive_support['a'].isin(stop_list) | drive_support['b'].isin(stop_list)]
+        #drive_support = drive_support.loc[drive_support['a'].isin(stop_list) | drive_support['b'].isin(stop_list)]
         # prepend 'lot_' for a or b when it's not a stop, because it's a pnr instead.
-        drive_support.loc[drive_support['a'].isin(stop_list) & ~drive_support['b'].isin(stop_list),'b'] = drive_support['b'].map(lambda x: 'lot_' + str(x))
-        drive_support.loc[~drive_support['a'].isin(stop_list) & drive_support['b'].isin(stop_list),'a'] = drive_support['a'].map(lambda x: 'lot_' + str(x))
+#        drive_support.loc[drive_support['a'].isin(stop_list) & ~drive_support['b'].isin(stop_list),'b'] = drive_support['b'].map(lambda x: 'lot_' + str(x))
+#        drive_support.loc[~drive_support['a'].isin(stop_list) & drive_support['b'].isin(stop_list),'a'] = drive_support['a'].map(lambda x: 'lot_' + str(x))
+        drive_support.loc[drive_support['a'].isin(self.fasttrips_pnrs.keys()) & drive_support['b'].astype(str).str[:4].ne('lot_'), 'a'] = drive_support['a'].map(lambda x: 'lot_' + str(x))
+        drive_support.loc[drive_support['b'].isin(self.fasttrips_pnrs.keys()) & drive_support['a'].astype(str).str[:4].ne('lot_'), 'b'] = drive_support['b'].map(lambda x: 'lot_' + str(x))
+        WranglerLogger.debug(drive_support.loc[drive_support['a'].isin([11077,'lot_11077','11077']) | drive_support['b'].isin([11077,'lot_11077','11077'])])
+        drive_support.to_csv('drive_support_temp.csv')
         drive_support['ftsupp'] = drive_support.apply(self.map_drive_support, axis=1, walkskims=walkskims, nodeToTaz=nodeToTaz, maxTaz=maxTaz)
         WranglerLogger.debug("adding %d Drive Support Links to fasttrips_transfer_supplinks" % len(drive_support))
         self.fasttrips_transfer_supplinks.extend(drive_support['ftsupp'].tolist())
         WranglerLogger.debug('total transfer supplinks %d' % len(self.fasttrips_transfer_supplinks))
         
-    def map_walk_access(self, row, walkskims, nodeToTaz, maxTaz):
+    def map_walk_access(self, row, walkskims, nodeToTaz, maxTaz, update_stop_id=False):
         ftsupp = FastTripsWalkSupplink(walkskims=walkskims, nodeToTaz=nodeToTaz, maxTaz=maxTaz, template=row['supplink'])
+        if update_stop_id:
+            ftsupp.stop_id = int(row['stop_id'])
         return ftsupp
         
     def map_drive_access(self, row, hwyskims, pnrNodeToTaz):
@@ -927,9 +955,14 @@ class TransitNetwork(Network):
         return ftsupp
     
     def map_drive_support(self, row, walkskims, nodeToTaz, maxTaz):
-        ftsupp = FastTripsTransferSupplink(walkskims=walkskims, nodeToTaz=nodeToTaz, maxTaz=maxTaz, template=row['supplink'])
-        ftsupp.setToStopID(row['b'])
-        ftsupp.setFromStopID(row['a'])
+        if row['supplink'].isTransitTransfer():
+            ftsupp = FastTripsTransferSupplink(walkskims=walkskims, nodeToTaz=nodeToTaz, maxTaz=maxTaz, template=row['supplink'])
+            ftsupp.setToStopID(row['b'])
+            ftsupp.setFromStopID(row['a'])
+        elif row['supplink'].isDriveFunnel():
+            ftsupp = FastTripsTransferSupplink(template=row['supplink'])
+            ftsupp.setToStopID(row['b'])
+            ftsupp.setFromStopID(row['a'])
         return ftsupp
         
     def map_transit_transfer(self, row, walkskims, nodeToTaz, maxTaz):
@@ -1435,20 +1468,20 @@ class TransitNetwork(Network):
                             best_match_score = this_match_score
                             best_idx = name
                             data = [[line.name,route_pattern['route_id'].iloc[0],route_pattern['route_short_name'].iloc[0],route_pattern['direction_id'].iloc[0],route_pattern['pattern_id'].iloc[0],this_match_score]]
-                            best_xwalk = pd.DataFrame(data=data,columns=gtfs_xwalk_cols)
-                            best_stop_xwalk = pd.DataFrame(this_stop_xwalk)    
+                            #best_xwalk = pd.DataFrame(data=data,columns=gtfs_xwalk_cols)
+                            #best_stop_xwalk = pd.DataFrame(this_stop_xwalk)    
                         else:
                             continue
                         
-                best_xwalk = pd.DataFrame(data=data,columns=gtfs_xwalk_cols)
-                best_stop_xwalk = pd.DataFrame(this_stop_xwalk)    
+                    best_xwalk = pd.DataFrame(data=data,columns=gtfs_xwalk_cols)
+                    best_stop_xwalk = pd.DataFrame(this_stop_xwalk)    
                             
-                if isinstance(best_stop_xwalk, pd.DataFrame):
-                    WranglerLogger.debug('%s: match(es) found! %s' % (line.name, str(best_xwalk['route_id'].tolist())))
-                    self.gtfs_crosswalk = self.gtfs_crosswalk.append(best_xwalk)
-                    self.gtfs_node_crosswalk = self.gtfs_node_crosswalk.append(best_stop_xwalk)
-                else:
-                    WranglerLogger.debug('%s: NO MATCH FOUND' % line.name)
+                    if isinstance(best_stop_xwalk, pd.DataFrame):
+                        WranglerLogger.debug('%s: match(es) found! %s' % (line.name, str(best_xwalk['route_id'].tolist())))
+                        self.gtfs_crosswalk = self.gtfs_crosswalk.append(best_xwalk)
+                        self.gtfs_node_crosswalk = self.gtfs_node_crosswalk.append(best_stop_xwalk)
+                    else:
+                        WranglerLogger.debug('%s: NO MATCH FOUND' % line.name)
         self.gtfs_node_crosswalk.to_csv('%s_node_crosswalk.csv' % gtfs_agency)
         
     def getRouteMatch(self, left_route_stops, right_route_stops, dist_threshold=1000):
