@@ -42,6 +42,7 @@ USAGE = """
 if __name__=='__main__':
     opts, args = getopt.getopt(sys.argv[1:],"s:h:f:v:t:")
     if len(args) != 1:
+        print args
         print USAGE
         sys.exit(2)
     config_file     = args[0]
@@ -165,6 +166,7 @@ if __name__=='__main__':
         do_supplinks = False
         WranglerLogger.warn("Supplinks directory not defined (TRN_SUPPLINKS).  Skipping access and transfer links.")
     if do_supplinks:
+        transit_network.createFastTrips_PNRs(nodes_dict)
         #a lot of this stuff requires a model run directory with skims, and SkimUtils, so need to do some checks to make sure these are avaiable.
         WranglerLogger.debug("Merging supplinks.")
         transit_network.mergeSupplinks(TRN_SUPPLINKS)
@@ -219,7 +221,7 @@ if __name__=='__main__':
         WranglerLogger.debug("\tconverting supplinks to fasttrips format.")
         transit_network.getFastTripsSupplinks(walkskim,nodeToTaz,maxTAZ,hwyskims,pnrNodeToTAZ)
         WranglerLogger.debug("add pnrs")
-        transit_network.createFastTrips_PNRs(nodes_dict)
+        #transit_network.createFastTrips_PNRs(nodes_dict)
         
     WranglerLogger.debug("adding departure times to all lines")
     if not GTFS_SETTINGS:
