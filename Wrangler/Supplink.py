@@ -39,7 +39,7 @@ class Supplink(dict):
             self._applyTemplate(template)
 
     def __repr__(self):
-        s = "SUPPLINK N=%5d-%5d " % (self.Anode,self.Bnode)
+        s = "SUPPLINK N=%5s-%5s " % (self.Anode,self.Bnode)
 
         # Deal w/all link attributes
         fields = []
