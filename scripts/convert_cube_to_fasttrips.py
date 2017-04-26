@@ -1,12 +1,14 @@
 import copy,datetime,getopt,logging,os,shutil,sys,time
 import getopt
 from dbfpy import dbf
+import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(__file__),".."))
 
 CUBE_FREEFLOW   = None
 HWY_LOADED      = None
 TRN_SUPPLINKS   = None      # transit[tod].lin with dwell times, xfer_supplinks, and walk_drive_access:
 TRN_BASE        = None      # .link (off-street link) and fares:
+PNR_FILE        = None
 TRANSIT_CAPACITY_DIR = None
 FT_OUTPATH      = None
 CHAMP_NODE_NAMES = None
@@ -166,7 +168,12 @@ if __name__=='__main__':
         do_supplinks = False
         WranglerLogger.warn("Supplinks directory not defined (TRN_SUPPLINKS).  Skipping access and transfer links.")
     if do_supplinks:
-        transit_network.createFastTrips_PNRs(nodes_dict)
+        if PNR_FILE:
+            pnr_df = pd.read_csv(PNR_FILE, sep=' ')
+            pnr_df.rename(columns={'NodeID':'node','ZoneID':'zone','Capacity':'capacity','Cost':'hourly_cost'}, inplace=True)
+        else:
+            pnr_df = None
+        transit_network.createFastTrips_PNRs(nodes_dict, pnr_df)
         #a lot of this stuff requires a model run directory with skims, and SkimUtils, so need to do some checks to make sure these are avaiable.
         WranglerLogger.debug("Merging supplinks.")
         transit_network.mergeSupplinks(TRN_SUPPLINKS)
