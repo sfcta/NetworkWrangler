@@ -1593,7 +1593,7 @@ class TransitNetwork(Network):
             else:
                 raise NetworkException('Unhandled data type %s in self.lines' % type(line))
 
-    def createFastTrips_PNRs(self, coord_dict):
+    def createFastTrips_PNRs(self, coord_dict, pnr_df=None):
         # first convert pnrs defined in .pnr files
         for pnr in self.pnrs:
             if isinstance(pnr, PNRLink):
@@ -1602,16 +1602,36 @@ class TransitNetwork(Network):
                 else:
                     pnr_nodenum = int(pnr.pnr)
                     #WranglerLogger.warn("Non-integer pnr node %s for pnr" % (str(pnr.pnr)
+                if isinstance(pnr_df, pd.DataFrame):
+                    row = pnr_df.loc[:,pnr_df['node'].eq(pnr_nodenum)].iloc[0]
+                    capacity = row['capacity']
+                    hourly_cost = row['hourly_cost']
                 try:
-                    n = FastTripsNode(pnr_nodenum, coord_dict, isPNR=True)
+                    n = FastTripsPNRNode(pnr_nodenum, coord_dict, capacity=capacity, hourly_cost=hourly_cost)
                 except:
                     WranglerLogger.warn('PNR Node %d not found; placing PNR at station location' % pnr_nodenum)
                     (x, y) = coord_dict[int(pnr.station)]
                     x += 10
                     y += 10
                     coord_dict_mod = {pnr_nodenum: (x, y)}
-                    n = FastTripsNode(pnr_nodenum, coord_dict_mod, isPNR=True)
+                    n = FastTripsPNRNode(pnr_nodenum, coord_dict_mod, capacity=capacity, hourly_cost=hourly_cost)
                 self.fasttrips_pnrs[pnr_nodenum] = n
+        # add KNRs for all rail stops
+        for line in self.lines:
+            if isinstance(line,str): 
+                continue
+            if not isinstance(line,FastTripsTransitLine): 
+                continue
+            if line.mode in ['commuter_rail','light_rail','heavy_rail',
+                             'regional_rail','inter_regional_rail','high_speed_rail']:
+                for knr in line.getStopList():
+                    if knr not in self.fasttrips_pnrs.keys():
+                        try:
+                            n = FastTripsPNRNode(pnr_nodenum, coord_dict, capacity=capacity, hourly_cost=hourly_cost, drop_off=1)
+                            self.fasttrips_pnrs[pnr_nodenum] = n
+                        except:
+                            WranglerLogger.warn('KNR Node %d not found' % knr)                
+            
         # next, make psuedo-pnrs from drive-access links
 ##        for supplink in self.fasttrips_drive_supplinks.values():
 ##            if supplink.lot_id not in self.fasttrips_pnrs:
@@ -1619,7 +1639,6 @@ class TransitNetwork(Network):
 ##                self.fasttrips_pnrs[supplink.lot_id] = n
                 
     def createFastTrips_Agencies(self):
-        agency_data = []
         for line in self.lines:
             if isinstance(line,str): continue
             if not isinstance(line,FastTripsTransitLine): continue
@@ -2140,7 +2159,7 @@ class TransitNetwork(Network):
                 df_fareattrs_ft = df_fareattrs_ft.append(df_row)
 
         if sortFareRules:
-            df_farerules = df_farerules.drop_duplicates().sort(['fare_id','route_id'])
+            df_farerules = df_farerules.drop_duplicates(subset=['route_id','origin_id','destination_id','contains_id']).sort(['fare_id','route_id'])
             df_farerules_ft = df_farerules_ft.drop_duplicates().sort('fare_id')
             df_fareattrs = df_fareattrs.drop_duplicates().sort('fare_id')
             df_fareattrs_ft = df_fareattrs_ft.drop_duplicates().sort('fare_period')
