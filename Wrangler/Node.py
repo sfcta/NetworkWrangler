@@ -183,12 +183,11 @@ class FastTripsNode(Node):
     '''
     FastTrips Node Class.
     '''
-    def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None, template=None):
+    def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None, template=None, **kwargs):
         Node.__init__(self,n,champ_coord_dict,template)
 
         # stops.txt req'd
         self.stop_id        = abs(int(n))
-        self.ispnr          = isPNR
         self.stop_name      = Node.descriptions[self.stop_id] if self.stop_id in Node.descriptions.keys() else str(self.stop_id)
             
         self.stop_sequence  = None
@@ -251,10 +250,12 @@ class FastTripsNode(Node):
         
 class FastTripsPNRNode(FastTripsNode):
     def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None, template=None, **kwargs):
-        FastTripsNode.__init__(n,champ_coord_dict,stop_lat,stop_lon,template)
+        FastTripsNode.__init__(self, n,champ_coord_dict,stop_lat,stop_lon,template)
                 
         # PNR attributes
         self.lot_id         = kwargs['lot_id'] if 'lot_id' in kwargs.keys() else 'lot_' + str(self.stop_id)
+        self.lot_lat        = self.stop_lat
+        self.lot_lon        = self.stop_lon
         self.name           = kwargs['name'] if 'name' in kwargs.keys() else None
         self.capacity       = kwargs['capacity'] if 'capacity' in kwargs.keys() else 1000
         self.drop_off       = kwargs['drop_off'] if 'drop_off' in kwargs.keys() else None
