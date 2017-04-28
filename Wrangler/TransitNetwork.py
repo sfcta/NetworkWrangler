@@ -4,7 +4,7 @@ from .Linki import Linki
 from .Logger import WranglerLogger
 from .Network import Network
 from .NetworkException import NetworkException
-from .Node import Node, FastTripsNode
+from .Node import Node, FastTripsNode, FastTripsPNRNode
 from .PNRLink import PNRLink
 from .Regexes import * #nodepair_pattern
 from .TransitAssignmentData import TransitAssignmentData, TransitAssignmentDataException
@@ -926,7 +926,7 @@ class TransitNetwork(Network):
         # Drive Access
         WranglerLogger.debug('creating FastTripsDriveSupplinks')
         drive_access = pd.DataFrame(drive_access_data, columns=['taz','pnr','tp','direction','supplink']).drop_duplicates(subset=['taz','pnr','tp','direction'])
-        drive_access['ftsupp'] = drive_access.apply(self.map_drive_access, axis=1, hwyskims=hwyskims, pnrNodeToTaz=pnrNodeToTaz)
+        drive_access['ftsupp'] = drive_access.apply(self.map_drive_access, axis=1, hwyskims=hwyskims, pnrNodeToTaz=pnrNodeToTaz, nodeToTaz=nodeToTaz)
         self.fasttrips_drive_supplinks.extend(drive_access['ftsupp'].tolist())
         
         drive_support = pd.DataFrame(drive_support_data, columns=['a','b','tp','supplink']).drop_duplicates(subset=['a','b','tp'])
@@ -950,8 +950,8 @@ class TransitNetwork(Network):
             ftsupp.stop_id = int(row['stop_id'])
         return ftsupp
         
-    def map_drive_access(self, row, hwyskims, pnrNodeToTaz):
-        ftsupp = FastTripsDriveSupplink(hwyskims=hwyskims, pnrNodeToTaz=pnrNodeToTaz, tp=row['tp'], template=row['supplink'])
+    def map_drive_access(self, row, hwyskims, pnrNodeToTaz, nodeToTaz=None):
+        ftsupp = FastTripsDriveSupplink(hwyskims=hwyskims, pnrNodeToTaz=pnrNodeToTaz, nodeToTaz=None, tp=row['tp'], template=row['supplink'])
         return ftsupp
     
     def map_drive_support(self, row, walkskims, nodeToTaz, maxTaz):
@@ -1112,7 +1112,7 @@ class TransitNetwork(Network):
                             
                                 
                     elif supplink.isDriveAccess() or supplink.isDriveEgress():
-                        ftsupp = FastTripsDriveSupplink(hwyskims=hwyskims, pnrNodeToTaz=pnrNodeToTaz, tp=tp, template=supplink)
+                        ftsupp = FastTripsDriveSupplink(hwyskims=hwyskims, pnrNodeToTaz=pnrNodeToTaz, nodeToTaz=nodeToTaz, tp=tp, template=supplink)
                         self.fasttrips_drive_supplinks[(ftsupp.Anode,ftsupp.Bnode,tp)] = ftsupp
                     else:
                         WranglerLogger.debug('unknown supplink type %s' % str(supplink))
@@ -1595,6 +1595,7 @@ class TransitNetwork(Network):
 
     def createFastTrips_PNRs(self, coord_dict, pnr_df=None):
         # first convert pnrs defined in .pnr files
+        stations = set()
         for pnr in self.pnrs:
             if isinstance(pnr, PNRLink):
                 if pnr.pnr == PNRLink.UNNUMBERED:
@@ -1602,10 +1603,16 @@ class TransitNetwork(Network):
                 else:
                     pnr_nodenum = int(pnr.pnr)
                     #WranglerLogger.warn("Non-integer pnr node %s for pnr" % (str(pnr.pnr)
+                stations.add(pnr.station)
                 if isinstance(pnr_df, pd.DataFrame):
-                    row = pnr_df.loc[:,pnr_df['node'].eq(pnr_nodenum)].iloc[0]
-                    capacity = row['capacity']
-                    hourly_cost = row['hourly_cost']
+                    try:
+                        row = pnr_df.loc[pnr_df['node'].eq(pnr_nodenum),:].iloc[0]
+                        capacity = row['capacity']
+                        hourly_cost = row['hourly_cost'] / 100.0
+                    except:
+                        WranglerLogger.debug('No pnr info found for node %d' % pnr_nodenum)
+                        capacity = 100
+                        hourly_cost = 0.0
                 try:
                     n = FastTripsPNRNode(pnr_nodenum, coord_dict, capacity=capacity, hourly_cost=hourly_cost)
                 except:
@@ -1624,14 +1631,39 @@ class TransitNetwork(Network):
                 continue
             if line.mode in ['commuter_rail','light_rail','heavy_rail',
                              'regional_rail','inter_regional_rail','high_speed_rail']:
-                for knr in line.getStopList():
-                    if knr not in self.fasttrips_pnrs.keys():
+                for stop_id in line.getStopList():
+                    if stop_id not in self.fasttrips_pnrs.keys() and stop_id not in stations:
+                        knr = stop_id + 900000
+                        WranglerLogger.debug('Adding KNR %d for stop %d' % (knr, stop_id))
                         try:
-                            n = FastTripsPNRNode(pnr_nodenum, coord_dict, capacity=capacity, hourly_cost=hourly_cost, drop_off=1)
-                            self.fasttrips_pnrs[pnr_nodenum] = n
+                            (x, y) = coord_dict[stop_id]
+                            x += 10
+                            y += 10
+                            coord_dict_mod = {knr: (x, y)}
+                            n = FastTripsPNRNode(knr, coord_dict_mod, capacity=capacity, hourly_cost=hourly_cost, drop_off=1)
+                            self.fasttrips_pnrs[knr] = n
                         except:
                             WranglerLogger.warn('KNR Node %d not found' % knr)                
-            
+                        # add the drive funnel
+                        s = Supplink()
+                        s.setId('%d-%d' % (knr, stop_id))
+                        s.setMode(6)
+                        for tp in WranglerLookups.ALL_TIMEPERIODS:
+                            try:
+                                self.supplinks[tp].append(s)
+                            except:
+                                self.supplinks[tp] = [s]
+                        
+                        # add drive access for SFTAZs
+                        for taz in range(980):
+                            s = Supplink()
+                            s.setId('%d-%d' % (taz+1, knr))
+                            s.setMode(3)
+                            for tp in WranglerLookups.ALL_TIMEPERIODS:
+                                try:
+                                    self.supplinks[tp].append(s)
+                                except:
+                                    self.supplinks[tp] = [s]
         # next, make psuedo-pnrs from drive-access links
 ##        for supplink in self.fasttrips_drive_supplinks.values():
 ##            if supplink.lot_id not in self.fasttrips_pnrs:
@@ -1703,13 +1735,14 @@ class TransitNetwork(Network):
     def writeFastTrips_PNRs(self, f='drive_access_points_ft.txt', path='.', writeHeaders=True):
         df_pnrs = None
         pnr_data = []
+        cols = ['lot_id','lot_lat','lot_lon','capacity','hourly_cost']
         for pnr in self.fasttrips_pnrs.values():
             if not isinstance(pnr, FastTripsNode): continue
-            data = pnr.asList(['lot_id','stop_lat','stop_lon'])
+            data = pnr.asList(cols)
             pnr_data.append(data)
-        df_pnrs = pd.DataFrame(columns=['lot_id','lot_lat','lot_lon'],data=pnr_data)
+        df_pnrs = pd.DataFrame(columns=cols,data=pnr_data)
         df_pnrs = df_pnrs.drop_duplicates()
-        df_pnrs.to_csv(os.path.join(path, f),index=False, headers=['lot_id','lot_lat','lot_lon'])
+        df_pnrs.to_csv(os.path.join(path, f),index=False, headers=cols)
         
     def writeFastTrips_Vehicles(self, f='vehicles_ft.txt', path='.', writeHeaders=True):
         vehicles = []
