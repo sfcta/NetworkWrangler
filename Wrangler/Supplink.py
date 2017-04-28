@@ -292,7 +292,7 @@ class FastTripsWalkSupplink(Supplink):
         self._reverse_direction             = direction
     
 class FastTripsDriveSupplink(Supplink):
-    def __init__(self, hwyskims=None, pnrNodeToTaz=None, tp=None, template=None):
+    def __init__(self, hwyskims=None, pnrNodeToTaz=None, nodeToTaz=None, tp=None, template=None):
         Supplink.__init__(self,template)
         # drive_access req'd
         if self.isDriveAccess():
@@ -307,9 +307,9 @@ class FastTripsDriveSupplink(Supplink):
         self.travel_time = None # float, minutes
         self.start_time = None  # hhmmss or blank
         self.end_time = None    # hhmmss or blank
-        
+
         if hwyskims and tp and pnrNodeToTaz:
-            self.getSupplinkAttributes(hwyskims, pnrNodeToTaz, tp)
+            self.getSupplinkAttributes(hwyskims, pnrNodeToTaz, tp, nodeToTaz)
         elif tp:
             self.setStartTimeEndTimeFromTimePeriod(tp)
         
@@ -330,7 +330,7 @@ class FastTripsDriveSupplink(Supplink):
         self.start_time = WranglerLookups.TIMEPERIOD_TO_TIMERANGE[tp][0]
         self.end_time = WranglerLookups.TIMEPERIOD_TO_TIMERANGE[tp][1]
 
-    def getSupplinkAttributes(self, hwyskims, pnrNodeToTaz, tp):
+    def getSupplinkAttributes(self, hwyskims, pnrNodeToTaz, tp, nodeToTaz):
         if isinstance(tp, str):
             TIMEPERIOD_STR_TO_NUM = {}
             for k, v in Skim.TIMEPERIOD_NUM_TO_STR.iteritems():
@@ -345,23 +345,39 @@ class FastTripsDriveSupplink(Supplink):
 
         self.setDirection()
         if self.direction == 'access':
-            (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
-                hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=pnrNodeToTaz[self.lot_id], mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
+            try:
+                (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                    hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=pnrNodeToTaz[self.lot_id], mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
+            except:
+                (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                    hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=nodeToTaz[self.lot_id-900000], mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
             cost = btoll + vtoll
             if dist < 0.01:        
                 # no access -- try toll
-                (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
-                    hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=pnrNodeToTaz[self.lot_id], mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"],segdir = 1)
+                try:
+                    (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                        hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=pnrNodeToTaz[self.lot_id], mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"],segdir = 1)
+                except:
+                    (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                        hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=nodeToTaz[self.lot_id-900000], mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"],segdir = 1)
                 cost = btoll + vtoll
 
         elif self.direction == 'egress':  
-            (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
-                hwyskims[tpnum].getHwySkimAttributes(origtaz=pnrNodeToTaz[self.lot_id], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
+            try:
+                (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                    hwyskims[tpnum].getHwySkimAttributes(origtaz=pnrNodeToTaz[self.lot_id], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
+            except:
+                (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                    hwyskims[tpnum].getHwySkimAttributes(origtaz=nodeToTaz[self.lot_id-900000], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
             cost = btoll + vtoll
                             
             if dist > 0.01: # no access - try toll
-                (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
-                    hwyskims[tpnum].getHwySkimAttributes(origtaz=pnrNodeToTaz[self.lot_id], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"], segdir = 1)
+                try:
+                    (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                        hwyskims[tpnum].getHwySkimAttributes(origtaz=pnrNodeToTaz[self.lot_id], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"], segdir = 1)
+                except:
+                    (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                        hwyskims[tpnum].getHwySkimAttributes(origtaz=nodeToTaz[self.lot_id-900000], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"], segdir = 1)
                 cost = btoll + vtoll
 
         self.dist = dist
