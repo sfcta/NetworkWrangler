@@ -168,24 +168,6 @@ if __name__=='__main__':
         do_supplinks = False
         WranglerLogger.warn("Supplinks directory not defined (TRN_SUPPLINKS).  Skipping access and transfer links.")
     if do_supplinks:
-        if PNR_FILE:
-            pnr_df = pd.read_csv(PNR_FILE, sep=' ')
-            pnr_df.rename(columns={'NodeID':'node','ZoneID':'zone','Capacity':'capacity','Cost':'hourly_cost'}, inplace=True)
-        else:
-            pnr_df = None
-        transit_network.createFastTrips_PNRs(nodes_dict, pnr_df)
-        #a lot of this stuff requires a model run directory with skims, and SkimUtils, so need to do some checks to make sure these are avaiable.
-        WranglerLogger.debug("Merging supplinks.")
-        transit_network.mergeSupplinks(TRN_SUPPLINKS)
-        WranglerLogger.debug("\tsetting up walk skims for access links.")
-
-        # try to get walk skims
-        try:
-            walkskim = WalkSkim(file_dir = MODEL_RUN_DIR)
-        except:
-            WranglerLogger.debug("WalkSkim module or MODEL_RUN_DIR not available.  Skipping WalkSkims.  Some walk access link attributes will be blank.")
-            walkskim = None
-
         # try to get node to taz correspondence
         try:
             nodeToTazFile = os.path.join(MODEL_RUN_DIR,"nodesToTaz.dbf")
@@ -200,6 +182,24 @@ if __name__=='__main__':
             WranglerLogger.debug("nodesToTaz.dbf not found.  MODEL_RUN_DIR may be missing or unavailable.")
             nodeToTaz = None
             maxTAZ = None
+            
+        if PNR_FILE:
+            pnr_df = pd.read_csv(PNR_FILE, sep=' ')
+            pnr_df.rename(columns={'NodeID':'node','ZoneID':'zone','Capacity':'capacity','Cost':'hourly_cost'}, inplace=True)
+        else:
+            pnr_df = None
+        transit_network.createFastTrips_PNRs(nodes_dict, pnr_df, nodeToTaz)
+        #a lot of this stuff requires a model run directory with skims, and SkimUtils, so need to do some checks to make sure these are avaiable.
+        WranglerLogger.debug("Merging supplinks.")
+        transit_network.mergeSupplinks(TRN_SUPPLINKS)
+        WranglerLogger.debug("\tsetting up walk skims for access links.")
+
+        # try to get walk skims
+        try:
+            walkskim = WalkSkim(file_dir = MODEL_RUN_DIR)
+        except:
+            WranglerLogger.debug("WalkSkim module or MODEL_RUN_DIR not available.  Skipping WalkSkims.  Some walk access link attributes will be blank.")
+            walkskim = None
 
         WranglerLogger.debug("\tsetting up highway skims for access links.")
         hwyskims = {}
