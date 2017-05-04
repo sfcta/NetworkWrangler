@@ -1593,7 +1593,7 @@ class TransitNetwork(Network):
             else:
                 raise NetworkException('Unhandled data type %s in self.lines' % type(line))
 
-    def createFastTrips_PNRs(self, coord_dict, pnr_df=None):
+    def createFastTrips_PNRs(self, coord_dict, pnr_df=None, nodeToTaz=None):
         # first convert pnrs defined in .pnr files
         stations = set()
         for pnr in self.pnrs:
@@ -1607,21 +1607,23 @@ class TransitNetwork(Network):
                 if isinstance(pnr_df, pd.DataFrame):
                     try:
                         row = pnr_df.loc[pnr_df['node'].eq(pnr_nodenum),:].iloc[0]
-                        capacity = row['capacity']
+                        capacity = int(row['capacity'])
                         hourly_cost = row['hourly_cost'] / 100.0
+                        zone_id = row['zone']
                     except:
                         WranglerLogger.debug('No pnr info found for node %d' % pnr_nodenum)
                         capacity = 100
                         hourly_cost = 0.0
+                        zone_id = None
                 try:
-                    n = FastTripsPNRNode(pnr_nodenum, coord_dict, capacity=capacity, hourly_cost=hourly_cost)
+                    n = FastTripsPNRNode(pnr_nodenum, coord_dict, capacity=capacity, hourly_cost=hourly_cost, zone_id=zone_id)
                 except:
                     WranglerLogger.warn('PNR Node %d not found; placing PNR at station location' % pnr_nodenum)
                     (x, y) = coord_dict[int(pnr.station)]
                     x += 10
                     y += 10
                     coord_dict_mod = {pnr_nodenum: (x, y)}
-                    n = FastTripsPNRNode(pnr_nodenum, coord_dict_mod, capacity=capacity, hourly_cost=hourly_cost)
+                    n = FastTripsPNRNode(pnr_nodenum, coord_dict_mod, capacity=capacity, hourly_cost=hourly_cost, zone_id=zone_id)
                 self.fasttrips_pnrs[pnr_nodenum] = n
         # add KNRs for all rail stops
         for line in self.lines:
@@ -1640,14 +1642,18 @@ class TransitNetwork(Network):
                             x += 10
                             y += 10
                             coord_dict_mod = {knr: (x, y)}
-                            n = FastTripsPNRNode(knr, coord_dict_mod, capacity=capacity, hourly_cost=hourly_cost, drop_off=1)
+                            n = FastTripsPNRNode(knr, coord_dict_mod, zone_id=nodeToTaz[stop_id])
+                            #n.zone_id = Node.node_to_zone[stop_id]
                             self.fasttrips_pnrs[knr] = n
-                        except:
-                            WranglerLogger.warn('KNR Node %d not found' % knr)                
+                        except Exception as e:
+                            WranglerLogger.warn('KNR Node %d not found' % knr)
+                            WranglerLogger.warn('error: %s' % str(e))
+                            continue
                         # add the drive funnel
                         s = Supplink()
                         s.setId('%d-%d' % (knr, stop_id))
                         s.setMode(6)
+                        s.setZone(n.zone_id if n.zone_id else Node.node_to_zone[stop_id])
                         for tp in WranglerLookups.ALL_TIMEPERIODS:
                             try:
                                 self.supplinks[tp].append(s)
@@ -1655,10 +1661,12 @@ class TransitNetwork(Network):
                                 self.supplinks[tp] = [s]
                         
                         # add drive access for SFTAZs
-                        for taz in range(980):
+                        #for taz in range(981):
+                        for taz in range(981):
                             s = Supplink()
                             s.setId('%d-%d' % (taz+1, knr))
                             s.setMode(3)
+                            s.setZone(n.zone_id if n.zone_id else Node.node_to_zone[stop_id])
                             for tp in WranglerLookups.ALL_TIMEPERIODS:
                                 try:
                                     self.supplinks[tp].append(s)
