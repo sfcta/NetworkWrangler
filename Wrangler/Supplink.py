@@ -34,7 +34,7 @@ class Supplink(dict):
         self.Bnode = None
         self.mode  = None
         self.support_flag = False
-        
+        self.zone_id = None
         if template:
             self._applyTemplate(template)
 
@@ -58,6 +58,7 @@ class Supplink(dict):
         self.Anode = copy.deepcopy(template.Anode)
         self.Bnode = copy.deepcopy(template.Bnode)
         self.mode  = copy.deepcopy(template.mode)
+        self.zone_id = copy.deepcopy(template.zone_id)
         for key in template.keys():
             self[key] = copy.deepcopy(template[key])
             
@@ -68,6 +69,9 @@ class Supplink(dict):
         self.Anode = int(nodeList[0])
         self.Bnode = int(nodeList[1])
 
+    def setZone(self, zone):
+        self.zone_id = int(zone)
+        
     def setSupportFlag(self, flag=True):
         self.support_flag = flag
         
@@ -307,6 +311,7 @@ class FastTripsDriveSupplink(Supplink):
         self.travel_time = None # float, minutes
         self.start_time = None  # hhmmss or blank
         self.end_time = None    # hhmmss or blank
+        #self.zone_id = None
 
         if hwyskims and tp and pnrNodeToTaz:
             self.getSupplinkAttributes(hwyskims, pnrNodeToTaz, tp, nodeToTaz)
@@ -345,39 +350,39 @@ class FastTripsDriveSupplink(Supplink):
 
         self.setDirection()
         if self.direction == 'access':
-            try:
+            if self.zone_id:
                 (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
-                    hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=pnrNodeToTaz[self.lot_id], mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
-            except:
+                hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=self.zone_id, mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
+            else:
                 (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
-                    hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=nodeToTaz[self.lot_id-900000], mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
+                hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=pnrNodeToTaz[self.lot_id], mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
             cost = btoll + vtoll
             if dist < 0.01:        
                 # no access -- try toll
-                try:
+                if self.zone_id:
                     (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
-                        hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=pnrNodeToTaz[self.lot_id], mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"],segdir = 1)
-                except:
+                    hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=self.zone_id, mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"],segdir = 1)
+                else:
                     (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
-                        hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=nodeToTaz[self.lot_id-900000], mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"],segdir = 1)
+                    hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=pnrNodeToTaz[self.lot_id], mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"],segdir = 1)
                 cost = btoll + vtoll
 
-        elif self.direction == 'egress':  
-            try:
+        elif self.direction == 'egress':
+            if self.zone_id:
                 (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
-                    hwyskims[tpnum].getHwySkimAttributes(origtaz=pnrNodeToTaz[self.lot_id], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
-            except:
+                hwyskims[tpnum].getHwySkimAttributes(origtaz=self.zone_id, desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
+            else:
                 (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
-                    hwyskims[tpnum].getHwySkimAttributes(origtaz=nodeToTaz[self.lot_id-900000], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
+                hwyskims[tpnum].getHwySkimAttributes(origtaz=pnrNodeToTaz[self.lot_id], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
             cost = btoll + vtoll
                             
             if dist > 0.01: # no access - try toll
-                try:
+                if self.zone_id:
                     (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
-                        hwyskims[tpnum].getHwySkimAttributes(origtaz=pnrNodeToTaz[self.lot_id], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"], segdir = 1)
-                except:
+                    hwyskims[tpnum].getHwySkimAttributes(origtaz=self.zone_id, desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"], segdir = 1)
+                else:
                     (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
-                        hwyskims[tpnum].getHwySkimAttributes(origtaz=nodeToTaz[self.lot_id-900000], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"], segdir = 1)
+                    hwyskims[tpnum].getHwySkimAttributes(origtaz=pnrNodeToTaz[self.lot_id], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"], segdir = 1)
                 cost = btoll + vtoll
 
         self.dist = dist
