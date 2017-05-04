@@ -29,7 +29,7 @@ class Fare(object):
 
         # stuff needed for FT
         self.fair_id            = None          # calculated
-        self.fare_class         = None          # calculated
+        self.fare_period         = None          # calculated
         self.operator           = operator
         self.line               = line
         self.mode               = mode
@@ -61,10 +61,10 @@ class Fare(object):
 
         regular local fare:
             fare_id: opername_modetype
-            fare_class: opername_modetype_allday
+            fare_period: opername_modetype_allday
         zonal fare:
             fare_id: opername_modetype_2Z (where x is number of zones crossed)
-            fare_class: opername_modetype_2Z_allday
+            fare_period: opername_modetype_2Z_allday
         '''
         if fare_id:
             self.fare_id = fare_id
@@ -86,21 +86,21 @@ class Fare(object):
             
         return self.fare_id
 
-    def setFareClass(self, fare_class=None, style='fasttrips', suffix=None):
-        if fare_class:
-            self.fare_class = fare_class
-            return self.fare_class
+    def setFareClass(self, fare_period=None, style='fasttrips', suffix=None):
+        if fare_period:
+            self.fare_period = fare_period
+            return self.fare_period
         if self.fare_id:
-            self.fare_class = self.fare_id
+            self.fare_period = self.fare_id
         else:
-            self.fare_class = self.setFareId()
+            self.fare_period = self.setFareId()
         todpart1 = HHMMSSToCHAMPTimePeriod(self.start_time)
         todpart2 = HHMMSSToCHAMPTimePeriod(self.end_time)
         if todpart1 == todpart2:
             todpart = todpart1
         else:
             todpart = '%s_to_%s' % (todpart1, todpart2)
-        self.fare_class = '%s_%s' % (self.fare_class, todpart)
+        self.fare_period = '%s_%s' % (self.fare_period, todpart)
 
     def asDataFrame(self, columns=None):
         import pandas as pd
@@ -150,6 +150,20 @@ class ODFare(Fare):
     def hasStationNames(self):
         if self.from_name and self.to_name: return True
         return False
+    
+    def reverse(self):
+        temp = self.from_node
+        self.from_node = self.to_node
+        self.to_node = temp
+        temp = self.from_name
+        self.from_name = self.to_name
+        self.to_name = temp
+        self.setFareId()
+        
+    def get_reverse(self):
+        fare = copy.deepcopy(self)
+        fare.reverse()
+        return fare
     
     def __repr__(self):
         s = str(self)
@@ -336,7 +350,7 @@ class FastTripsFare(Fare):
     
     '''
     def __init__(self,fare_id=None,route_id=None,operator=None,line=None,origin_id=None,destination_id=None,
-                 contains_id=None,price=None,fare_class=None,start_time=None,end_time=None,
+                 contains_id=None,price=None,fare_period=None,start_time=None,end_time=None,
                  transfers=None,transfer_duration=None,
                  champ_line_name=None, champ_mode=None,
                  zone_suffixes=False, price_conversion=1):
@@ -370,10 +384,10 @@ class FastTripsFare(Fare):
         
         regular local fare:
             fare_id: opername_modetype
-            fare_class: opername_modetype_allday
+            fare_period: opername_modetype_allday
         zonal fare:
             fare_id: opername_modetype_2Z (where x is number of zones crossed)
-            fare_class: opername_modetype_2Z_allday
+            fare_period: opername_modetype_2Z_allday
         '''
         if fare_id:
             self.fare_id = fare_id
@@ -426,26 +440,28 @@ class FastTripsFare(Fare):
         return cmp(self.__dict__,other.__dict__)
 
     def __str__(self):
-        s = 'fare_id: %s, orig_id: %s, dest_id: %s, cont_id: %s, fare_class: %s, price: $%.2f' % (self.fare_id,self.origin_id,self.destination_id,self.contains_id,self.fare_class, float(self.price)/100)
+        s = 'fare_id: %s, orig_id: %s, dest_id: %s, cont_id: %s, fare_period: %s, price: $%.2f' % (self.fare_id,self.origin_id,self.destination_id,self.contains_id,self.fare_period, float(self.price)/100)
         return s
 
 
 class FastTripsTransferFare(XFFare):
-    def __init__(self, from_fare_class=None, to_fare_class=None, is_flat_fee=None,
-                 from_mode=None, to_mode=None, price=None, transfer_rule=None, price_conversion=1):
-        XFFare.__init__(self, from_mode=from_mode, to_mode=to_mode, price=price, price_conversion=price_conversion)
-        self.from_fare_class = from_fare_class
-        self.to_fare_class = to_fare_class
-        self.is_flat_fee = 1 if is_flat_fee == None else is_flat_fee
-        self.transfer_rule = transfer_rule if transfer_rule else self.price
-        if self.is_flat_fee:
-            self.transfer_rule = self.transfer_rule * price_conversion
-        if self.is_flat_fee and self.transfer_rule:
-            self.price = self.transfer_rule
-            
+    def __init__(self, from_fare_period=None, to_fare_period=None, transfer_fare_type=None,
+                 from_mode=None, to_mode=None, transfer_fare=None, price_conversion=1):
+        # TODO handle conditions where transfer_fare_type is not an incremental cost
+        XFFare.__init__(self, from_mode=from_mode, to_mode=to_mode, price=transfer_fare, price_conversion=price_conversion)
+        self.from_fare_period = from_fare_period
+        self.to_fare_period = to_fare_period
+        self.transfer_fare_type = transfer_fare_type if transfer_fare_type else 'transfer_free'
+        self.transfer_fare = transfer_fare * price_conversion
+        if self.transfer_fare_type == 'transfer_cost' and self.transfer_fare == 0:
+            self.transfer_fare_type == 'transfer_free'
+        if self.transfer_fare < 0 and self.transfer_fare_type == 'transfer_cost':
+            self.transfer_fare = -1.0 * self.transfer_fare
+            self.transfer_fare_type = 'transfer_discount'
+        
     def asDataFrame(self, columns):
         if columns is None:
-            columns = ['from_fare_class','to_fare_class','is_flat_fee','transfer_rule']
+            columns = ['from_fare_period','to_fare_period','is_flat_fee','transfer_rule']
         df = Fare.asDataFrame(self, columns)
         return df
 

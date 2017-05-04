@@ -1,12 +1,14 @@
 import copy,datetime,getopt,logging,os,shutil,sys,time
 import getopt
 from dbfpy import dbf
+import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(__file__),".."))
 
 CUBE_FREEFLOW   = None
 HWY_LOADED      = None
 TRN_SUPPLINKS   = None      # transit[tod].lin with dwell times, xfer_supplinks, and walk_drive_access:
 TRN_BASE        = None      # .link (off-street link) and fares:
+PNR_FILE        = None
 TRANSIT_CAPACITY_DIR = None
 FT_OUTPATH      = None
 CHAMP_NODE_NAMES = None
@@ -42,6 +44,7 @@ USAGE = """
 if __name__=='__main__':
     opts, args = getopt.getopt(sys.argv[1:],"s:h:f:v:t:")
     if len(args) != 1:
+        print args
         print USAGE
         sys.exit(2)
     config_file     = args[0]
@@ -152,7 +155,7 @@ if __name__=='__main__':
         WranglerLogger.debug("Making FarelinksFares unique")
         transit_network.makeFarelinksUnique()
         WranglerLogger.debug("creating zone ids")
-        transit_network.createFarelinksZones()
+        zone_to_nodes = transit_network.createFarelinksZones()
         nodeNames = getChampNodeNameDictFromFile(os.environ["CHAMP_node_names"])
         WranglerLogger.debug("Adding station names to OD Fares")
         transit_network.addStationNamestoODFares(nodeNames)
@@ -165,18 +168,6 @@ if __name__=='__main__':
         do_supplinks = False
         WranglerLogger.warn("Supplinks directory not defined (TRN_SUPPLINKS).  Skipping access and transfer links.")
     if do_supplinks:
-        #a lot of this stuff requires a model run directory with skims, and SkimUtils, so need to do some checks to make sure these are avaiable.
-        WranglerLogger.debug("Merging supplinks.")
-        transit_network.mergeSupplinks(TRN_SUPPLINKS)
-        WranglerLogger.debug("\tsetting up walk skims for access links.")
-
-        # try to get walk skims
-        try:
-            walkskim = WalkSkim(file_dir = MODEL_RUN_DIR)
-        except:
-            WranglerLogger.debug("WalkSkim module or MODEL_RUN_DIR not available.  Skipping WalkSkims.  Some walk access link attributes will be blank.")
-            walkskim = None
-
         # try to get node to taz correspondence
         try:
             nodeToTazFile = os.path.join(MODEL_RUN_DIR,"nodesToTaz.dbf")
@@ -191,6 +182,24 @@ if __name__=='__main__':
             WranglerLogger.debug("nodesToTaz.dbf not found.  MODEL_RUN_DIR may be missing or unavailable.")
             nodeToTaz = None
             maxTAZ = None
+            
+        if PNR_FILE:
+            pnr_df = pd.read_csv(PNR_FILE, sep=' ')
+            pnr_df.rename(columns={'NodeID':'node','ZoneID':'zone','Capacity':'capacity','Cost':'hourly_cost'}, inplace=True)
+        else:
+            pnr_df = None
+        transit_network.createFastTrips_PNRs(nodes_dict, pnr_df, nodeToTaz)
+        #a lot of this stuff requires a model run directory with skims, and SkimUtils, so need to do some checks to make sure these are avaiable.
+        WranglerLogger.debug("Merging supplinks.")
+        transit_network.mergeSupplinks(TRN_SUPPLINKS)
+        WranglerLogger.debug("\tsetting up walk skims for access links.")
+
+        # try to get walk skims
+        try:
+            walkskim = WalkSkim(file_dir = MODEL_RUN_DIR)
+        except:
+            WranglerLogger.debug("WalkSkim module or MODEL_RUN_DIR not available.  Skipping WalkSkims.  Some walk access link attributes will be blank.")
+            walkskim = None
 
         WranglerLogger.debug("\tsetting up highway skims for access links.")
         hwyskims = {}
@@ -219,7 +228,7 @@ if __name__=='__main__':
         WranglerLogger.debug("\tconverting supplinks to fasttrips format.")
         transit_network.getFastTripsSupplinks(walkskim,nodeToTaz,maxTAZ,hwyskims,pnrNodeToTAZ)
         WranglerLogger.debug("add pnrs")
-        transit_network.createFastTrips_PNRs(nodes_dict)
+        #transit_network.createFastTrips_PNRs(nodes_dict)
         
     WranglerLogger.debug("adding departure times to all lines")
     if not GTFS_SETTINGS:
@@ -230,10 +239,12 @@ if __name__=='__main__':
             WranglerLogger.debug('matching gtfs for %s using %s AND CROSSWALK %s ENCODING %s' % (agency, settings['path'], settings['crosswalk'], settings['gtfs_encoding']))
             #if agency == 'sf_muni': continue
             transit_network.matchLinesToGTFS2(gtfs_agency=agency,
-                                             gtfs_path=settings['path'],
-                                             gtfs_encoding=settings['gtfs_encoding'])
+                                              gtfs_path=settings['path'],
+                                              gtfs_encoding=settings['gtfs_encoding'],
+                                              stop_count_diff_threshold=settings['stop_count_diff_threshold'])
             transit_network.addDeparturesFromGTFS(agency=agency, gtfs_path=settings['path'], gtfs_encoding=settings['gtfs_encoding'])
-    
+        transit_network.gtfs_crosswalk.to_csv('gtfs_route_crosswalk.csv')
+        transit_network.gtfs_node_crosswalk.to_csv('gtfs_node_crosswalk.csv')
     WranglerLogger.debug("writing agencies")
     transit_network.writeFastTrips_Agencies(path=FT_OUTPATH)
     WranglerLogger.debug("writing calendar")
@@ -244,12 +255,19 @@ if __name__=='__main__':
     WranglerLogger.debug("writing lines")
     transit_network.writeFastTrips_Shapes(path=FT_OUTPATH)
     WranglerLogger.debug("writing routes")
-    transit_network.writeFastTrips_Routes(path=FT_OUTPATH)
+    try:
+        transit_network.writeFastTrips_Routes(path=FT_OUTPATH)
+    except Exception as e:
+        WranglerLogger.debug('failed writing routes: %s' % str(e))
+    transit_network.writeFastTrips_toCHAMP(path=FT_OUTPATH) # get rid of this later; it's duplicate.
     WranglerLogger.debug("writing stop times")
     transit_network.writeFastTrips_Trips(path=FT_OUTPATH)
     if do_fares:
-        WranglerLogger.debug("writing fares")
-        transit_network.writeFastTrips_Fares(path=FT_OUTPATH, sortFareRules=SORT_OUTPUTS)
+        try:
+            WranglerLogger.debug("writing fares")
+            transit_network.writeFastTrips_Fares(path=FT_OUTPATH, sortFareRules=SORT_OUTPUTS)
+        except Exception as e:
+            WranglerLogger.debug('failed writing fairs: %s' % str(e))
     WranglerLogger.debug("writing stops")
     transit_network.writeFastTrips_Stops(path=FT_OUTPATH)
     if do_highways:
@@ -257,16 +275,26 @@ if __name__=='__main__':
         transit_network.writeFastTrips_PNRs(path=FT_OUTPATH)
     WranglerLogger.debug("Writing supplinks")
     transit_network.writeFastTrips_Access(path=FT_OUTPATH)
-
+    
+    
+    # TODO maybe zones should be handled in a more elegant way
+    f = open(os.path.join(FT_OUTPATH,'zones_ft.txt'), 'w')
+    f.write('zone_id,zone_lat,zone_lon\n')
+    for zone, nodes in zone_to_nodes.iteritems():
+        f.write('%s,0,0\n' % (zone))
+        
     print "writing FastTrips to CHAMP route name crosswalk"
     transit_network.writeFastTrips_toCHAMP(path=FT_OUTPATH)
     
     print "copying to csv for readability"
     os.mkdir(os.path.join(FT_OUTPATH,'csvs'))
-    for file in ['agency.txt','calendar.txt','drive_access_ft.txt','drive_access_points_ft.txt','fare_attributes.txt','fare_attributes_ft.txt','fare_rules.txt',
-                 'fare_rules_ft.txt','fare_transfer_rules_ft.txt','routes.txt','routes_ft.txt','shapes.txt','stop_times.txt','stop_times_ft.txt','stops.txt',
-                 'stops_ft.txt','transfers.txt','transfers_ft.txt','trips.txt','trips_ft.txt','vehicles_ft.txt','walk_access_ft.txt']:
-        shutil.copyfile(os.path.join(FT_OUTPATH,file),os.path.join(FT_OUTPATH,'csvs',file.replace('.txt','.csv')))
+    for f in ['agency.txt','calendar.txt','drive_access_ft.txt','drive_access_points_ft.txt','fare_attributes.txt','fare_attributes_ft.txt','fare_rules.txt',
+              'fare_periods_ft.txt','fare_transfer_rules_ft.txt','routes.txt','routes_ft.txt','shapes.txt','stop_times.txt','stop_times_ft.txt','stops.txt',
+              'stops_ft.txt','transfers.txt','transfers_ft.txt','trips.txt','trips_ft.txt','vehicles_ft.txt','walk_access_ft.txt']:
+        try:
+            shutil.copyfile(os.path.join(FT_OUTPATH,f),os.path.join(FT_OUTPATH,'csvs',f.replace('.txt','.csv')))
+        except Exception as e:
+            WranglerLogger.warn("failed to copy file %s to csv" % f)
         
     if test:
         print "testing"

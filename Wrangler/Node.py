@@ -183,15 +183,13 @@ class FastTripsNode(Node):
     '''
     FastTrips Node Class.
     '''
-    def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None, template=None, isPNR=False):
+    def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None, template=None, **kwargs):
         Node.__init__(self,n,champ_coord_dict,template)
 
         # stops.txt req'd
         self.stop_id        = abs(int(n))
-        self.ispnr          = isPNR
         self.stop_name      = Node.descriptions[self.stop_id] if self.stop_id in Node.descriptions.keys() else str(self.stop_id)
-        if self.ispnr:
-            self.lot_id = 'lot_' + str(self.stop_id)
+            
         self.stop_sequence  = None
         if stop_lat and stop_lon:
             self.stop_lat = stop_lat
@@ -203,7 +201,10 @@ class FastTripsNode(Node):
         self.stop_code              = None
         self.stop_desc              = None
 
-        if self.stop_id in Node.node_to_zone.keys():
+        self.zone_id = kwargs['zone_id'] if 'zone_id' in kwargs.keys() else None
+        if self.zone_id:
+            pass
+        elif self.stop_id in Node.node_to_zone.keys():
             self.zone_id            = Node.node_to_zone[self.stop_id]
         else:
             self.zone_id            = None
@@ -224,7 +225,7 @@ class FastTripsNode(Node):
         self.platform_height        = None
         self.level                  = None
         self.off_board_payment      = None
-
+        
     def addXY(self, coords):
         """
         takes an (x,y) tuple or a dict of node numbers to (x,y) tuples
@@ -249,4 +250,20 @@ class FastTripsNode(Node):
         data = self.asList(columns)        
         df = pd.DataFrame(columns=columns,data=[data])
         return df
+        
+class FastTripsPNRNode(FastTripsNode):
+    def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None, template=None, **kwargs):
+        FastTripsNode.__init__(self, n,champ_coord_dict,stop_lat,stop_lon,template)
+        
+        # PNR attributes
+        self.lot_id         = kwargs['lot_id'] if 'lot_id' in kwargs.keys() else 'lot_' + str(self.stop_id)
+        self.lot_lat        = self.stop_lat
+        self.lot_lon        = self.stop_lon
+        self.zone_id        = kwargs['zone_id'] if 'zone_id' in kwargs.keys() else None
+        self.name           = kwargs['name'] if 'name' in kwargs.keys() else None
+        self.capacity       = kwargs['capacity'] if 'capacity' in kwargs.keys() else 100
+        self.drop_off       = kwargs['drop_off'] if 'drop_off' in kwargs.keys() else None
+        self.hourly_cost    = kwargs['hourly_cost'] if 'hourly_cost' in kwargs.keys() else None
+        self.max_cost       = kwargs['max_cost'] if 'max_cost' in kwargs.keys() else None
+        self.type           = kwargs['type'] if 'type' in kwargs.keys() else None
         

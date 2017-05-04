@@ -34,12 +34,12 @@ class Supplink(dict):
         self.Bnode = None
         self.mode  = None
         self.support_flag = False
-        
+        self.zone_id = None
         if template:
             self._applyTemplate(template)
 
     def __repr__(self):
-        s = "SUPPLINK N=%5d-%5d " % (self.Anode,self.Bnode)
+        s = "SUPPLINK N=%5s-%5s " % (self.Anode,self.Bnode)
 
         # Deal w/all link attributes
         fields = []
@@ -58,6 +58,7 @@ class Supplink(dict):
         self.Anode = copy.deepcopy(template.Anode)
         self.Bnode = copy.deepcopy(template.Bnode)
         self.mode  = copy.deepcopy(template.mode)
+        self.zone_id = copy.deepcopy(template.zone_id)
         for key in template.keys():
             self[key] = copy.deepcopy(template[key])
             
@@ -68,6 +69,9 @@ class Supplink(dict):
         self.Anode = int(nodeList[0])
         self.Bnode = int(nodeList[1])
 
+    def setZone(self, zone):
+        self.zone_id = int(zone)
+        
     def setSupportFlag(self, flag=True):
         self.support_flag = flag
         
@@ -162,8 +166,18 @@ class FastTripsWalkSupplink(Supplink):
     def __init__(self, walkskims=None, nodeToTaz=None, maxTaz=None, template=None):
         Supplink.__init__(self,template)
         # walk_access req'd
-        self.taz = self.Anode
-        self.stop_id = self.Bnode
+        self.setDirection()
+        if self.isWalkEgress():
+            self.taz = self.Bnode
+            self.stop_id = self.Anode
+        elif self.isWalkAccess():
+            self.taz = self.Anode
+            self.stop_id = self.Bnode
+        elif self.isTransitTransfer():
+            pass
+        elif self.isDriveFunnel() or self.isWalkFunnel():
+            self.setSupportFlag(True)
+            #WranglerLogger.warn("invalid supplink type %s for supplink (%d, %d)" % (self.mode, self.Anode, self.Bnode))
         self.dist = float(self['DIST'])*0.01 if 'DIST' in self.keys() else None
         
         # walk_access optional
@@ -176,21 +190,38 @@ class FastTripsWalkSupplink(Supplink):
             self.employment_density = None
             self.auto_capacity = None
             self.indirectness = None
+            # these enable reversing the supplink without having to pass walkskims again.  
+            # Reverse all the attributes in case the reverse path is a different route.
+            self._reverse_dist = self.dist
+            self._reverse_elevation_gain = None
+            self._reverse_population_density = None
+            self._reverse_retail_density = None
+            self._reverse_auto_capacity = None
+            self._reverse_indirectness = None
+            self._reverse_direction = 'egress' if self.direction == 'access' else 'access'
         
     def asDataFrame(self, columns=None):
         if columns is None:
-            columns = ['taz','stop_id','dist','elevation_gain','population_density',
+            columns = ['taz','stop_id','direction','dist','elevation_gain','population_density',
                        'employment_density','retail_density','auto_capacity','indirectness']
         result = Supplink.asDataFrame(self, columns)
         return result
 
     def asList(self, columns=None):
         if columns is None:
-            columns = ['taz','stop_id','dist','elevation_gain','population_density',
+            columns = ['taz','stop_id','direction','dist','elevation_gain','population_density',
                        'employment_density','retail_density','auto_capacity','indirectness']
         result = Supplink.asList(self, columns)
         return result
-    
+
+    def setDirection(self):
+        if self.isWalkAccess():
+            self.direction = 'access' # 'access' or 'egress'
+        elif self.isWalkEgress():
+            self.direction = 'egress'
+        else:
+            self.direction = None
+            
     def setAttributes(self, walkskims, nodeToTaz, maxTaz):
         if isinstance(walkskims, str):
             walkskims = WalkSkim(file_dir = walkskims)
@@ -202,14 +233,19 @@ class FastTripsWalkSupplink(Supplink):
         elif self.Anode in nodeToTaz:
             oTaz = nodeToTaz[self.Anode]
         else:
-            raise NetworkException("Counldn't find TAZ for node %d in (%d, %d)" % (self.Anode,self.Anode,self.Bnode))
+            #print nodeToTaz
+            WranglerLogger.warn("Counldn't find TAZ for node %d in (%d, %d)" % (self.Anode,self.Anode,self.Bnode))
+            return
+            #raise NetworkException("Counldn't find TAZ for node %d in (%d, %d)" % (self.Anode,self.Anode,self.Bnode))
 
         if self.Bnode <= maxTaz:
             dTaz = self.Bnode
         elif self.Bnode in nodeToTaz:
             dTaz = nodeToTaz[self.Bnode]
         else:
-            raise NetworkException("Counldn't find TAZ for node %d in (%d, %d)" % (self.Bnode,self.Anode,self.Bnode))
+            WranglerLogger.warn("Counldn't find TAZ for node %d in (%d, %d)" % (self.Bnode,self.Anode,self.Bnode))
+            return
+            #raise NetworkException("Counldn't find TAZ for node %d in (%d, %d)" % (self.Bnode,self.Anode,self.Bnode))
         
         self.dist               = walkskims.getWalkSkimAttribute(oTaz,dTaz,"DISTANCE") if self.dist == None else self.dist  # link sum (miles).  Keep the original distance if it's available.
         #self.dist = max(self.dist, 0.01)
@@ -220,9 +256,47 @@ class FastTripsWalkSupplink(Supplink):
         self.elevation_gain     = walkskims.getWalkSkimAttribute(oTaz,dTaz,"ABS_RISE")   # link sum when rise > 0 (feet)
         self.indirectness       = max(walkskims.getWalkSkimAttribute(oTaz,dTaz,"INDIRECTNESS"),1) # distance divided by rock dove distance, force to be 1 if the skim distance is less than straight-line
         
+        self._reverse_dist               = walkskims.getWalkSkimAttribute(dTaz,oTaz,"DISTANCE") if self.dist == None else self.dist  # link sum (miles).  Keep the original distance if it's available.
+        #self.dist = max(self.dist, 0.01)
+        self._reverse_population_density = walkskims.getWalkSkimAttribute(dTaz,oTaz,"AVGPOPDEN")  # average pop/acre
+        self._reverse_employment_density = walkskims.getWalkSkimAttribute(dTaz,oTaz,"AVGEMPDEN")  # average employment/acre
+        self._reverse_retail_density     = None #walkSkim.getWalkSkimAttribute(oTaz,dTaz,"AVGRETDEN")  # average retail/acre
+        self._reverse_auto_capacity      = walkskims.getWalkSkimAttribute(dTaz,oTaz,"AVGCAP")     # average road capacity (vph)
+        self._reverse_elevation_gain     = walkskims.getWalkSkimAttribute(dTaz,oTaz,"ABS_RISE")   # link sum when rise > 0 (feet)
+        self._reverse_indirectness       = max(walkskims.getWalkSkimAttribute(dTaz,oTaz,"INDIRECTNESS"),1) # distance divided by rock dove distance, force to be 1 if the skim distance is less than straight-line
+        self._reverse_direction = 'egress' if self.direction == 'access' else 'access'
+        
+    def reverse(self):
+        Supplink.reverse(self)
+        dist = self.dist
+        population_density                  = self.population_density
+        employment_density                  = self.employment_density
+        retail_density                      = self.retail_density
+        auto_capacity                       = self.auto_capacity
+        elevation_gain                      = self.elevation_gain
+        indirectness                        = self.indirectness
+        direction                           = self.direction
+        
+        self.dist                           = self._reverse_dist
+        self.population_density             = self._reverse_population_density
+        self.employment_density             = self._reverse_employment_density
+        self.retail_density                 = self._reverse_retail_density
+        self.auto_capacity                  = self._reverse_auto_capacity
+        self.elevation_gain                 = self._reverse_elevation_gain
+        self.indirectness                   = self._reverse_indirectness
+        self.direction                      = self._reverse_direction
+        
+        self._reverse_dist                  = dist
+        self._reverse_population_density    = population_density
+        self._reverse_employment_density    = employment_density
+        self._reverse_retail_density        = retail_density
+        self._reverse_auto_capacity         = auto_capacity
+        self._reverse_elevation_gain        = elevation_gain
+        self._reverse_indirectness          = indirectness
+        self._reverse_direction             = direction
     
 class FastTripsDriveSupplink(Supplink):
-    def __init__(self, hwyskims=None, pnrNodeToTaz=None, tp=None, template=None):
+    def __init__(self, hwyskims=None, pnrNodeToTaz=None, nodeToTaz=None, tp=None, template=None):
         Supplink.__init__(self,template)
         # drive_access req'd
         if self.isDriveAccess():
@@ -237,9 +311,10 @@ class FastTripsDriveSupplink(Supplink):
         self.travel_time = None # float, minutes
         self.start_time = None  # hhmmss or blank
         self.end_time = None    # hhmmss or blank
-        
+        #self.zone_id = None
+
         if hwyskims and tp and pnrNodeToTaz:
-            self.getSupplinkAttributes(hwyskims, pnrNodeToTaz, tp)
+            self.getSupplinkAttributes(hwyskims, pnrNodeToTaz, tp, nodeToTaz)
         elif tp:
             self.setStartTimeEndTimeFromTimePeriod(tp)
         
@@ -260,7 +335,7 @@ class FastTripsDriveSupplink(Supplink):
         self.start_time = WranglerLookups.TIMEPERIOD_TO_TIMERANGE[tp][0]
         self.end_time = WranglerLookups.TIMEPERIOD_TO_TIMERANGE[tp][1]
 
-    def getSupplinkAttributes(self, hwyskims, pnrNodeToTaz, tp):
+    def getSupplinkAttributes(self, hwyskims, pnrNodeToTaz, tp, nodeToTaz):
         if isinstance(tp, str):
             TIMEPERIOD_STR_TO_NUM = {}
             for k, v in Skim.TIMEPERIOD_NUM_TO_STR.iteritems():
@@ -275,22 +350,38 @@ class FastTripsDriveSupplink(Supplink):
 
         self.setDirection()
         if self.direction == 'access':
-            (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+            if self.zone_id:
+                (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=self.zone_id, mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
+            else:
+                (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
                 hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=pnrNodeToTaz[self.lot_id], mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
             cost = btoll + vtoll
             if dist < 0.01:        
                 # no access -- try toll
-                (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                if self.zone_id:
+                    (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                    hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=self.zone_id, mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"],segdir = 1)
+                else:
+                    (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
                     hwyskims[tpnum].getHwySkimAttributes(origtaz=self.taz, desttaz=pnrNodeToTaz[self.lot_id], mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"],segdir = 1)
                 cost = btoll + vtoll
 
-        elif self.direction == 'egress':  
-            (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+        elif self.direction == 'egress':
+            if self.zone_id:
+                (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                hwyskims[tpnum].getHwySkimAttributes(origtaz=self.zone_id, desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
+            else:
+                (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
                 hwyskims[tpnum].getHwySkimAttributes(origtaz=pnrNodeToTaz[self.lot_id], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["DA"], segdir = 1)
             cost = btoll + vtoll
                             
             if dist > 0.01: # no access - try toll
-                (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                if self.zone_id:
+                    (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
+                    hwyskims[tpnum].getHwySkimAttributes(origtaz=self.zone_id, desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"], segdir = 1)
+                else:
+                    (time,term,dist,btoll,vtoll,dummy,dummy,dummy) = \
                     hwyskims[tpnum].getHwySkimAttributes(origtaz=pnrNodeToTaz[self.lot_id], desttaz=self.taz, mode=HighwaySkim.MODE_STR_TO_NUM["TollDA"], segdir = 1)
                 cost = btoll + vtoll
 
@@ -309,8 +400,8 @@ class FastTripsTransferSupplink(FastTripsWalkSupplink):
         self.transfer_type = None       # 0-whatev,1-timed transfer,2-min xfer time,3-not possible
         self.min_transfer_time = None   # float, minutes
         # transfer_ft req'd
-        self.from_route_id = None
-        self.to_route_id = None
+        self.from_route_id = from_route_id
+        self.to_route_id = to_route_id
         self.schedule_precedence = None # 'from' or 'to'
     
     def setFromStopID(self, stopid):
@@ -318,3 +409,13 @@ class FastTripsTransferSupplink(FastTripsWalkSupplink):
     
     def setToStopID(self, stopid):
         self.to_stop_id = stopid
+
+    def reverse(self):
+        FastTripsWalkSupplink.reverse(self)
+        temp = self.from_route_id
+        self.from_stop_id = self.Anode
+        self.to_stop_id = self.Bnode
+        self.from_route_id = self.to_route_id
+        self.to_route_id = temp
+        if self.schedule_precedence == 'from': self.schedule_precedence = 'to'
+        if self.schedule_precedence == 'to': self.schedule_precedence = 'from'
