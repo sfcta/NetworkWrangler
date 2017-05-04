@@ -201,7 +201,10 @@ class FastTripsNode(Node):
         self.stop_code              = None
         self.stop_desc              = None
 
-        if self.stop_id in Node.node_to_zone.keys():
+        self.zone_id = kwargs['zone_id'] if 'zone_id' in kwargs.keys() else None
+        if not self.zone_id:
+            pass
+        elif self.stop_id in Node.node_to_zone.keys():
             self.zone_id            = Node.node_to_zone[self.stop_id]
         else:
             self.zone_id            = None
@@ -251,11 +254,12 @@ class FastTripsNode(Node):
 class FastTripsPNRNode(FastTripsNode):
     def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None, template=None, **kwargs):
         FastTripsNode.__init__(self, n,champ_coord_dict,stop_lat,stop_lon,template)
-                
+        
         # PNR attributes
         self.lot_id         = kwargs['lot_id'] if 'lot_id' in kwargs.keys() else 'lot_' + str(self.stop_id)
         self.lot_lat        = self.stop_lat
         self.lot_lon        = self.stop_lon
+        self.zone_id        = kwargs['zone_id'] if 'zone_id' in kwargs.keys() else 1
         self.name           = kwargs['name'] if 'name' in kwargs.keys() else None
         self.capacity       = kwargs['capacity'] if 'capacity' in kwargs.keys() else 1000
         self.drop_off       = kwargs['drop_off'] if 'drop_off' in kwargs.keys() else None
