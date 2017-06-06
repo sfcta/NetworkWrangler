@@ -1731,14 +1731,14 @@ class TransitNetwork(Network):
                                                                                   'wednesday','thursday','friday',
                                                                                   'saturday','sunday',
                                                                                   'start_date','end_date'])
-        df_calendar.to_csv(os.path.join(path,f),index=False,headers=writeHeaders)
+        df_calendar.to_csv(os.path.join(path,f),index=False,header=writeHeaders)
     
     def writeFastTrips_Agencies(self, f='agency.txt', path='.', writeHeaders=True):
         if len(self.fasttrips_agencies) == 0:
             self.createFastTrips_Agencies()
         
         df_agency = pd.DataFrame(columns=['agency_id','agency_name','agency_url','agency_timezone'],data=self.fasttrips_agencies.values())
-        df_agency.to_csv(os.path.join(path,f),index=False,headers=writeHeaders)
+        df_agency.to_csv(os.path.join(path,f),index=False,header=writeHeaders)
 
     def writeFastTrips_PNRs(self, f='drive_access_points_ft.txt', path='.', writeHeaders=True):
         df_pnrs = None
@@ -1750,7 +1750,7 @@ class TransitNetwork(Network):
             pnr_data.append(data)
         df_pnrs = pd.DataFrame(columns=cols,data=pnr_data)
         df_pnrs = df_pnrs.drop_duplicates()
-        df_pnrs.to_csv(os.path.join(path, f),index=False, headers=cols)
+        df_pnrs.to_csv(os.path.join(path, f),index=False, header=cols)
         
     def writeFastTrips_Vehicles(self, f='vehicles_ft.txt', path='.', writeHeaders=True):
         vehicles = []
@@ -1768,7 +1768,7 @@ class TransitNetwork(Network):
                     else:
                         df_vehicles = df_vehicles.append(df_row)
                     vehicles.append(vtype)
-        df_vehicles.to_csv(os.path.join(path,f),index=False,headers=writeHeaders)
+        df_vehicles.to_csv(os.path.join(path,f),index=False,header=writeHeaders)
 
     def writeFastTrips_Access(self, f_walk='walk_access_ft.txt', f_drive='drive_access_ft.txt', f_transfer='transfers.txt', f_transfer_ft='transfers_ft.txt', path='.', writeHeaders=True, sort=True):
         df_walk = None
@@ -1838,11 +1838,11 @@ class TransitNetwork(Network):
             df_transfer.sort_values(by=transfer_keys, inplace=True)
             df_transfer_ft.sort_values(by=transfer_ft_keys, inplace=True)
             
-        df_walk.to_csv(os.path.join(path,f_walk),index=False,headers=writeHeaders)
-        df_drive.to_csv(os.path.join(path,f_drive),index=False,headers=writeHeaders)
-        df_transfer.to_csv(os.path.join(path,f_transfer),index=False,headers=writeHeaders)
-        df_transfer_withPNR.to_csv(os.path.join(path,'transfers_withPNR.txt'), index=False, headers=writeHeaders)
-        df_transfer_ft.to_csv(os.path.join(path,f_transfer_ft),index=False,headers=writeHeaders)
+        df_walk.to_csv(os.path.join(path,f_walk),index=False,header=writeHeaders)
+        df_drive.to_csv(os.path.join(path,f_drive),index=False,header=writeHeaders)
+        df_transfer.to_csv(os.path.join(path,f_transfer),index=False,header=writeHeaders)
+        df_transfer_withPNR.to_csv(os.path.join(path,'transfers_withPNR.txt'), index=False, header=writeHeaders)
+        df_transfer_ft.to_csv(os.path.join(path,f_transfer_ft),index=False,header=writeHeaders)
             
     def writeFastTrips_Shapes(self, f='shapes.txt', path='.', writeHeaders=True):
         '''
@@ -2210,8 +2210,8 @@ class TransitNetwork(Network):
             df_fareattrs = df_fareattrs.drop_duplicates()
             df_fareattrs_ft = df_fareattrs_ft.drop_duplicates()
             
-        df_farerules.to_csv(os.path.join(path, f_farerules),index=False,headers=writeHeaders)
-        df_farerules_ft.to_csv(os.path.join(path,f_farerules_ft),index=False,headers=writeHeaders)
+        df_farerules.to_csv(os.path.join(path, f_farerules),index=False,header=writeHeaders)
+        df_farerules_ft.to_csv(os.path.join(path,f_farerules_ft),index=False,header=writeHeaders)
         df_fareattrs.to_csv(os.path.join(path,f_fareattr),index=False,header=writeHeaders,float_format='%.2f')
         df_fareattrs_ft.to_csv(os.path.join(path, f_fareattr_ft),index=False,header=writeHeaders,float_format='%.2f')
 
