@@ -1,4 +1,4 @@
-import copy,datetime,getopt,logging,os,shutil,sys,time
+import copy,datetime,getopt,logging,os,shutil,sys,time,random
 import getopt
 from dbfpy import dbf
 import pandas as pd
@@ -20,7 +20,7 @@ DEPARTURE_TIMES_OFFSET = None
 SORT_OUTPUTS    = False
 GTFS_SETTINGS   = None
 CROSSWALK       = None
-
+SEED            = 4000
 USAGE = """
 
   python convert_cube_to_fasttrips.py -s False -h False -f False -v False -t test config_file.py
@@ -68,7 +68,7 @@ if __name__=='__main__':
             test = True
 
     execfile(config_file)
-
+    random.seed(SEED)
     if CHAMP_DIR:
         sys.path.append(CHAMP_DIR)
     if OVERRIDE_DIR:
