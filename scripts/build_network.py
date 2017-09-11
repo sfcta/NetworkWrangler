@@ -437,7 +437,7 @@ if __name__ == '__main__':
         # Build the networks!
         Wrangler.WranglerLogger.info("Checking out %s networks" % netmode)
         clonedcount = 0
-        for project in NETWORK_PROJECTS[netmode]:
+        for project in NETWORK_PROJECTS[netmode]:    
             (project_name, projType, tag, kwargs) = getProjectAttributes(project)
             if tag == None: tag = TAG
             
