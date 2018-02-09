@@ -382,8 +382,17 @@ if __name__ == '__main__':
     os.chdir(SCRATCH_SUBDIR)
     
     # Initialize networks
+    (project_name, projType, tag, kwargs) = getProjectAttributes(NETWORK_PROJECTS['hwy'][0]) if len(NETWORK_PROJECTS['hwy']) > 0 else (None, None, None, None)
+    
+    if PIVOT_DIR:
+        hwy_basenetworkpath = os.path.join(PIVOT_DIR,"hwy")
+    elif projType == 'seed':
+        hwy_basenetworkpath = project_name
+    else:
+        hwy_basenetworkpath = "Roads2010"
+    
     networks = {'hwy' :Wrangler.HighwayNetwork(champVersion=CHAMPVERSION,
-                                               basenetworkpath=os.path.join(PIVOT_DIR,"hwy") if PIVOT_DIR else "Roads2010",
+                                               basenetworkpath=hwy_basenetworkpath,
                                                networkBaseDir=NETWORK_BASE_DIR,
                                                networkProjectSubdir=NETWORK_PROJECT_SUBDIR,
                                                networkSeedSubdir=NETWORK_SEED_SUBDIR,
@@ -619,7 +628,7 @@ if __name__ == '__main__':
             else:
                 (parentdir, networkdir, gitdir, projectsubdir) = networks[netmode].getClonedProjectArgs(project_name, None, projType, TEMP_SUBDIR)
 
-            applied_SHA1 = networks[netmode].applyProject(parentdir, networkdir, gitdir, projectsubdir)
+            applied_SHA1 = networks[netmode].applyProject(parentdir, networkdir, gitdir, projectsubdir, **kwargs)
             appliedcount += 1
 
     # Network Loop #3: write the networks.

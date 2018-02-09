@@ -104,11 +104,11 @@ class PlanSpecs:
 
         for proj in self.projects:
             if netType in self.projectdict[proj]['nettypes']:
-                projectlist.append(self.projectAsDict(proj))
-##                if not self.modelyear or self.modelyear >= self.projectdict[proj]["year"]:
-##                    projectlist.append(self.projectAsDict(proj))
-##                else:
-##                    WranglerLogger.warn("not applying %s, projectyear %d >= modelyear %d" % (proj, self.projectdict[proj]["year"], self.modelyear))
+##              projectlist.append(self.projectAsDict(proj))
+                if not self.modelyear or self.modelyear >= self.projectdict[proj]["year"]:
+                    projectlist.append(self.projectAsDict(proj))
+                else:
+                    WranglerLogger.warn("not applying %s, projectyear %d >= modelyear %d" % (proj, self.projectdict[proj]["year"], self.modelyear))
         return projectlist
         
     def printProjects(self,fileObj):
