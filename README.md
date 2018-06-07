@@ -4,7 +4,7 @@
 Tools to build GTFS-PLUS from the SFCTA's SF-CHAMP model inputs
 
 **version**: 1.14  
-**updated**: 22 June 2016  
+**updated**: 07 June 2018  
 **created**: 29 December 2015  
 **authors**:
 
@@ -15,6 +15,17 @@ Tools to build GTFS-PLUS from the SFCTA's SF-CHAMP model inputs
 [GTFS]: https://developers.google.com/transit/gtfs/reference
 [GTFS-PLUS]: https://github.com/osplanning-data-standards/GTFS-PLUS
 
+PREREQUISITES: NetworkWrangler relies on Python 2.7.  Most, if not all, required packages should be included in the 
+			   Anaconda distribution of Python.  The following non-core packages, which are not included in the 
+			   NetworkWrangler distribution, are used:
+					dbfpy
+					pandas
+					shapely
+					pyproj
+					xlrd
+					shapefile
+					odict
+					
 USAGE: python NetworkWrangler\scripts\convert_cube_to_fasttrips.py NetworkWrangler\config\config_testnet.py
 
 NOTE: This is still under development. If you have comments
