@@ -1,4 +1,6 @@
-import os,sys
+import os,sys,copy
+from .Logger import WranglerLogger
+from .HelperFunctions import *
 
 __all__ = ['Node']
 
@@ -17,17 +19,41 @@ class Node(object):
     
     # static variables for nodes.xls
     descriptions        = {}
+    node_to_zone        = {}
+    onstreet_nodes      = []
+    offstreet_nodes     = []
     descriptions_read   = False
 
-    def __init__(self, n):
+    def __init__(self, n, coord_dict=None, template=None):
+        self.comment = None
         self.attr = {}
+        
+        if template: self._applyTemplate(template)
+        
         if isinstance(n,int):
             self.num = str(n)
         else:
             self.num = n            
         self.stop=(self.num.find('-')<0 and True or False)
-        self.comment = None
 
+        Node.getDescriptions()  
+
+        if isinstance(coord_dict, dict):
+            (self.x,self.y) = coord_dict[abs(int(n))]
+        else:
+            (self.x,self.y) = (-1,-1)
+        
+
+    def addXY(self, coords):
+        """
+        takes an (x,y) tuple or a dict of node numbers to (x,y) tuples
+        """
+        n = abs(int(self.num))
+        if isinstance(coords, tuple):
+            (self.x, self.y) = coords
+        elif isinstance(coords, dict):
+            (self.x, self.y) = coords[n]
+            
     def setStop(self, isStop=True):
         """
         Changes to stop-status of this node to *isStop*
@@ -85,7 +111,7 @@ class Node(object):
     # Dictionary methods
     def __getitem__(self,key): return self.attr[key]
     def __setitem__(self,key,value): self.attr[key]=value
-    def __cmp__(self,other): return cmp(int(self.num),other)
+    def __cmp__(self,other): return cmp(self.__dict__,other.__dict__)
 
     def description(self):
         """
@@ -122,4 +148,122 @@ class Node(object):
             print sys.exc_info()
             
         Node.descriptions_read = True
-                
+
+    @staticmethod
+    def setNodeToZone(node_to_zone):
+        if not isinstance(node_to_zone, dict): raise NetworkException("INVALID NODE_TO_ZONE DICTIONARY")
+        Node.node_to_zone = node_to_zone
+
+    @staticmethod
+    def addNodeToZone(node, zone):
+        if node in Node.node_to_zone.keys():
+            if zone != Node.node_to_zone[node]:
+                WranglerLogger.warn("Overwriting Zone ID %s with %s for Node %s" % (str(zone), str(Node.node_to_zone[node]), str(node)))
+        Node.node_to_zone[node] = zone
+
+    @staticmethod
+    def setOnStreetNodes(onstreet_nodes):
+        if not isinstance(onstreet_nodes, list): raise NetworkException("INVALID ONSTREET_NODES LIST")
+        Node.onstreet_nodes = onstreet_nodes
+        
+    @staticmethod
+    def setOffStreetNodes(offstreet_nodes):
+        if not isinstance(offstreet_nodes, list): raise NetworkException("INVALID OFFSTREET_NODES LIST")
+        Node.offstreet_nodes = offstreet_nodes
+
+    def _applyTemplate(self, template):
+        self.attr   = copy.deepcopy(template.attr)
+        self.x      = copy.deepcopy(template.x)
+        self.y      = copy.deepcopy(template.y)
+        self.num    = copy.deepcopy(template.num)
+        self.comment = copy.deepcopy(template.comment)
+        self.stop   = copy.deepcopy(template.stop)
+        
+class FastTripsNode(Node):
+    '''
+    FastTrips Node Class.
+    '''
+    def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None, template=None, **kwargs):
+        Node.__init__(self,n,champ_coord_dict,template)
+
+        # stops.txt req'd
+        self.stop_id        = abs(int(n))
+        self.stop_name      = Node.descriptions[self.stop_id] if self.stop_id in Node.descriptions.keys() else str(self.stop_id)
+            
+        self.stop_sequence  = None
+        if stop_lat and stop_lon:
+            self.stop_lat = stop_lat
+            self.stop_lon = stop_lon
+        else:
+            self.stop_lon, self.stop_lat = reproject_to_wgs84(self.x,self.y,EPSG='+init=EPSG:2227')
+
+        # stops optional
+        self.stop_code              = None
+        self.stop_desc              = None
+
+        self.zone_id = kwargs['zone_id'] if 'zone_id' in kwargs.keys() else None
+        if self.zone_id:
+            pass
+        elif self.stop_id in Node.node_to_zone.keys():
+            self.zone_id            = Node.node_to_zone[self.stop_id]
+        else:
+            self.zone_id            = None
+        self.location_type          = None
+        self.parent_station         = None
+        self.stop_timezone          = None
+        self.wheelchair_boarding    = None
+
+        # stops_ft req'd
+        ## -- none --
+        
+        # stops_ft optional
+        self.shelter                = None
+        self.lighting               = None
+        self.bike_parking           = None
+        self.bike_share_station     = None
+        self.seating                = None
+        self.platform_height        = None
+        self.level                  = None
+        self.off_board_payment      = None
+        
+    def addXY(self, coords):
+        """
+        takes an (x,y) tuple or a dict of node numbers to (x,y) tuples
+        """
+        n = abs(int(self.num))
+        if isinstance(coords, tuple):
+            (self.x, self.y) = coords
+        elif isinstance(coords, dict):
+            (self.x, self.y) = coords[n]
+        self.stop_lon, self.stop_lat = reproject_to_wgs84(self.x,self.y,EPSG='+init=EPSG:2227')
+
+    def asList(self, columns=None):
+        if columns is None:
+            columns = ['stop_id','stop_name','stop_lat','stop_lon','zone_id']
+        data = []
+        for arg in columns:
+            data.append(getattr(self,arg))
+        return data
+            
+    def asDataFrame(self, columns=None):
+        import pandas as pd
+        data = self.asList(columns)        
+        df = pd.DataFrame(columns=columns,data=[data])
+        return df
+        
+class FastTripsPNRNode(FastTripsNode):
+    def __init__(self, n, champ_coord_dict=None, stop_lat=None, stop_lon=None, template=None, **kwargs):
+        FastTripsNode.__init__(self, n,champ_coord_dict,stop_lat,stop_lon,template)
+        
+        # PNR attributes
+        self.lot_id         = kwargs['lot_id'] if 'lot_id' in kwargs.keys() else 'lot_' + str(self.stop_id)
+        self.lot_lat        = self.stop_lat
+        self.lot_lon        = self.stop_lon
+        self.zone_id        = kwargs['zone_id'] if 'zone_id' in kwargs.keys() else None
+        self.name           = kwargs['name'] if 'name' in kwargs.keys() else None
+        self.capacity       = kwargs['capacity'] if 'capacity' in kwargs.keys() else 100
+        self.drop_off       = kwargs['drop_off'] if 'drop_off' in kwargs.keys() else None
+        self.hourly_cost    = kwargs['hourly_cost'] if 'hourly_cost' in kwargs.keys() else None
+        self.max_cost       = kwargs['max_cost'] if 'max_cost' in kwargs.keys() else None
+        self.type           = kwargs['type'] if 'type' in kwargs.keys() else None
+        

@@ -1,0 +1,7 @@
+Name,System,Stripped,Line,FullLineName,AM VehicleType,PM VehicleType,OP Vehicle Type
+TNT_A_EB,TNT,A_EB,A,A_Eastbound,bus,bus,bus
+TNT_A_WB,TNT,A_WB,A,A_Westbound,bus,bus,bus
+TNT_B_EB,TNT,B_EB,B,B_Eastbound,bus,bus,bus
+TNT_B_WB,TNT,B_WB,B,B_Westbound,bus,bus,bus
+TNT_C_NB,TNT,C_NB,C,C_Northbound,train,train,train
+TNT_C_SB,TNT,C_SB,C,C_Southbound,train,train,train

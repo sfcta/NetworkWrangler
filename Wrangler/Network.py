@@ -1,7 +1,7 @@
 import os, re, string, subprocess, sys, tempfile
 from .Logger import WranglerLogger
 from .NetworkException import NetworkException
-from .Regexes import git_commit_pattern
+from .Regexes import * #git_commit_pattern
 
 __all__ = ['Network']
 
@@ -368,7 +368,7 @@ class Network(object):
         if len(retstdout)<3:
             raise NetworkException("Git log failed; see log file")
         
-        m = re.match(git_commit_pattern, retstdout[0])
+        m = re.match(Regexes.git_commit_pattern, retstdout[0])
         if not m:
             raise NetworkException("Didn't understand git log output: [" + retstdout[0] + "]")
 

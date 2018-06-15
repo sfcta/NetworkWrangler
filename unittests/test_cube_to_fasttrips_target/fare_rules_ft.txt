@@ -1,0 +1,4 @@
+fare_id,fare_class,start_time,end_time
+tntransit_express_bus,tntransit_express_bus_allday,,
+tntransit_heavy_rail,tntransit_heavy_rail_allday,,
+tntransit_local_bus,tntransit_local_bus_allday,,

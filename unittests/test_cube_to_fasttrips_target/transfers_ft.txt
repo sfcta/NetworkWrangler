@@ -1,0 +1,13 @@
+from_stop_id,to_stop_id,dist,from_route_id,to_route_id,schedule_precedence
+137,186,0.10,TNT_A_EB,TNT_C_NB,to
+137,186,0.10,TNT_A_EB,TNT_C_SB,to
+137,186,0.10,TNT_A_WB,TNT_C_NB,to
+137,186,0.10,TNT_A_WB,TNT_C_SB,to
+186,137,0.10,TNT_C_NB,TNT_A_EB,from
+186,137,0.10,TNT_C_NB,TNT_A_WB,from
+186,137,0.10,TNT_C_SB,TNT_A_EB,from
+186,137,0.10,TNT_C_SB,TNT_A_WB,from
+200,185,0,,,to
+185,200,0,,,from
+201,128,0,,,to
+128,201,0,,,from

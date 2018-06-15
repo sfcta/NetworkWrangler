@@ -12,16 +12,18 @@ from .Supplink import Supplink
 from .TransitLine import TransitLine
 from .TransitLink import TransitLink
 from .ZACLink import ZACLink
+from .Fare import Fare, XFFare, ODFare, FarelinksFare
 
 __all__ = [ 'TransitParser' ]
 
-WRANGLER_FILE_SUFFICES = [ "lin", "link", "pnr", "zac", "access", "xfer" ]
+WRANGLER_FILE_SUFFICES = [ "lin", "link", "pnr", "zac", "access", "xfer", "fare" ,"dat"]
 
 # PARSER DEFINITION ------------------------------------------------------------------------------
 # NOTE: even though XYSPEED and TIMEFAC are node attributes here, I'm not sure that's really ok --
 # Cube documentation implies TF and XYSPD are node attributes...
 transit_file_def=r'''
 transit_file      := ( accessli / line / link / pnr / zac / supplink )+, smcw*, whitespace*
+fare_file         := ( od_fare / xf_fare / farelinks_fare )+, smcw*, whitespace*
 
 line              := whitespace?, smcw?, c"LINE", whitespace, lin_attr*, lin_node*, whitespace?
 lin_attr          := ( lin_attr_name, whitespace?, "=", whitespace?, attr_value, whitespace?,
@@ -60,22 +62,41 @@ supplink_attr_name:= c"mode" / c"dist" / c"speed" / c"oneway" / c"time"
                        
 accessli          := whitespace?, smcw?, nodenumA, spaces?, nodenumB, spaces?, accesstag?, spaces?, (float/int)?, spaces?, semicolon_comment?
 accesstag         := c"wnr" / c"pnr"
- 
+
+od_fare           := whitespace?, smcw?, nodepair, whitespace?, cost, whitespace?, semicolon_comment*
+xf_fare           := whitespace?, smcw?, fareblock, whitespace?, "=", whitespace?, cost, whitespace?, semicolon_comment*
+farelinks_fare    := (whitespace?, smcw?, c"FARELINKS FARE", "=", whitespace?, cost, whitespace?, comma, whitespace?, "L=",
+                        whitespace?, nodepairs, comma?, whitespace?, farelinks_attr*, whitespace?, semicolon_comment*)
+farelinks_attr    := (farelinks_attr_name, whitespace?, "=", whitespace?, attr_values, whitespace?, comma?, whitespace?)
+farelinks_attr_name := ( c"modes" / c"oneway" )
+
+cost              := int
 word_nodes        := c"nodes"
 word_node         := c"node"
 word_modes        := c"modes"
 word_zones        := c"zones"
 numseq            := int, (spaces?, ("-" / ","), spaces?, int)*
-nodepair          := nodenum, spaces?, ("-" / ","), spaces?, nodenum
+nodepairs         := nodepair, ( whitespace?, comma, whitespace?, nodepair)*
+nodepair          := nodenum_a, ((spaces?, ("-" / ","), spaces?) / [\t] / ' '), nodenum_b
 nodenumA          := nodenum
 nodenumB          := nodenum
 nodenum           := int
+attr_values       := attr_value, (whitespace?, comma, whitespace?, attr_value)*
 attr_value        := alphanums / string_single_quote / string_double_quote
 alphanums         := [a-zA-Z0-9\.]+
 <comma>           := [,]
 <whitespace>      := [ \t\r\n]+
 <spaces>          := [ \t]+
 smcw              := whitespace?, (semicolon_comment / c_comment, whitespace?)+
+fareblock         := word_xfer, openblock, modenum_a, closeblock, openblock, modenum_b, closeblock
+modenum_a         := modenum
+modenum_b         := modenum
+modenum           := int
+nodenum_a         := nodenum
+nodenum_b         := nodenum
+openblock         := "["
+closeblock        := "]"
+word_xfer         := c"XFARE"
 '''
 
 class TransitFileProcessor(DispatchProcessor):
@@ -91,7 +112,10 @@ class TransitFileProcessor(DispatchProcessor):
         self.xferlis   = []
         self.liType    = ''
         self.supplinks = []
-        
+        self.xf_fares = []
+        self.od_fares = []
+        self.farelinks_fares = []
+      
         self.endcomments = []
 
     def crackTags(self, leaf, buffer):
@@ -196,7 +220,62 @@ class TransitFileProcessor(DispatchProcessor):
             xxx = self.crackTags(leaf,buffer)
             supplink.append(xxx)
         self.supplinks.append(supplink)
-         
+
+
+    def od_fare(self, (tag,start,stop,subtags), buffer):
+        # this is the whole line
+        if self.verbosity>=1:
+            print tag, start, stop
+
+        # Append list items for this line
+        for leaf in subtags:
+            xxx = self.crackTags(leaf,buffer)
+            self.od_fares.append(xxx)
+
+        if self.verbosity==2:
+            # lines are composed of smcw (semicolon-comment / whitespace), line_attr and lin_node
+            for farepart in subtags:
+                print "  ",farepart[0], " -> [ ",
+                for partpart in farepart[3]:
+                    print partpart[0], "(", buffer[partpart[1]:partpart[2]],")",
+                print " ]"
+
+    def xf_fare(self, (tag,start,stop,subtags), buffer):
+        # this is the whole line
+        if self.verbosity>=1:
+            print tag, start, stop
+
+        # Append list items for this line
+        for leaf in subtags:
+            xxx = self.crackTags(leaf,buffer)
+            self.xf_fares.append(xxx)
+
+        if self.verbosity==2:
+            # lines are composed of smcw (semicolon-comment / whitespace), line_attr and lin_node
+            for farepart in subtags:
+                print "  ",farepart[0], " -> [ ",
+                for partpart in farepart[3]:
+                    print partpart[0], "(", buffer[partpart[1]:partpart[2]],")",
+                print " ]"
+
+    def farelinks_fare(self, (tag,start,stop,subtags), buffer):
+        # this is the whole line
+        if self.verbosity>=1:
+            print tag, start, stop
+
+        # Append list items for this line
+        for leaf in subtags:
+            xxx = self.crackTags(leaf,buffer)
+            self.farelinks_fares.append(xxx)
+
+        if self.verbosity==2:
+            # lines are composed of smcw (semicolon-comment / whitespace), line_attr and lin_node
+            for farepart in subtags:
+                print "  ",farepart[0], " -> [ ",
+                for partpart in farepart[3]:
+                    print partpart[0], "(", buffer[partpart[1]:partpart[2]],")",
+                print " ]"
+                
     def smcw(self, (tag,start,stop,subtags), buffer):
         """ Semicolon comment whitespace
         """
@@ -530,3 +609,140 @@ class TransitParser(Parser):
         # Save last link too
         if currentSupplink: rows.append(currentSupplink)
         return rows
+
+    def convertXFFareData(self):
+        """ Convert the parsed tree of data into a usable python list of fares
+            returns list of comments and fare objects
+        """
+        rows = []
+        currentFare = None
+        key = None
+        value = None
+        comment = None
+        modea, modeb, cost = None, None, None
+        
+        for fare in self.tfp.xf_fares:
+            # add comments as simple strings:
+            if fare[0] in ('smcw','semicolon_comment'):
+                if currentFare:
+                    currentFare.comment = " "+fare[1].strip()  # fare comment
+                    rows.append(currentFare)
+                    currentFare = None
+                else:
+                    rows.append(fare[1].strip())
+                continue
+            if fare[0] == 'fareblock':
+                if currentFare:
+                    rows.append(currentFare)
+                    currentFare = None
+                for kid in fare[2]:
+                    if kid[0] == 'modenum_a': modea = kid[1]
+                    if kid[0] == 'modenum_b': modeb = kid[1]
+            if fare[0] == 'cost':
+                if currentFare:
+                    rows.append(currentFare)
+                    currentFare = None
+                cost = fare[1]
+
+            if modea and modeb and cost:
+                currentFare = XFFare(from_mode=modea, to_mode=modeb, price=cost)
+                ##print "Current Fare: ", str(currentFare)
+                modea, modeb, cost = None, None, None
+
+        if currentFare: rows.append(currentFare)
+        return rows
+    
+    def convertODFareData(self):
+        """ Convert the parsed tree of data into a usable python list of fares
+            returns list of comments and fare objects
+        """
+        rows = []
+        currentFare = None
+        key = None
+        value = None
+        comment = None
+        nodea, nodeb, cost = None, None, None
+        
+        for fare in self.tfp.od_fares:
+            # add comments as simple strings:
+            if fare[0] in ('smcw','semicolon_comment'):
+                if currentFare:
+                    currentFare.comment = " "+fare[1].strip()  # fare comment
+                    rows.append(currentFare)
+                    currentFare = None
+                else:
+                    rows.append(fare[1].strip())
+                continue
+            if fare[0] == 'nodepair':
+                if currentFare:
+                    rows.append(currentFare)
+                    currentFare = None
+                for kid in fare[2]:
+                    if kid[0] == 'nodenum_a': nodea = kid[1]
+                    if kid[0] == 'nodenum_b': nodeb = kid[1]
+            if fare[0] == 'cost':
+                if currentFare:
+                    rows.append(currentFare)
+                    currentFare = None
+                cost = fare[1]
+
+            if nodea and nodeb and cost:
+                currentFare = ODFare(from_node=nodea, to_node=nodeb, price=cost)
+                ##print "Current Fare: ", str(currentFare)
+                nodea, nodeb, cost = None, None, None
+
+        if currentFare: rows.append(currentFare)
+        return rows
+
+    def convertFarelinksFareData(self):
+        """ Convert the parsed tree of data into a usable python list of fares
+            returns list of comments and fare objects
+        """
+        rows = []
+        currentFare = None
+        key = None
+        value = None
+        comment = None
+        cost, oneway_flag, modes, nodepairs = None, None, [], []
+        
+        for fare in self.tfp.farelinks_fares:
+            # add comments as simple strings:
+            if fare[0] in ('smcw','semicolon_comment'):
+                if currentFare:
+                    currentFare.comment = " "+fare[1].strip()  # fare comment
+                    rows.append(currentFare)
+                    currentFare = None
+                else:
+                    rows.append(fare[1].strip())
+                continue
+            if fare[0] == 'nodepairs':
+                if currentFare:
+                    rows.append(currentFare)
+                    currentFare = None
+                for kid in fare[2]:
+                    if kid[0] == 'nodepair': nodepairs.append(kid[1])
+            if fare[0] == 'farelinks_attr':
+                if currentFare:
+                    rows.append(currentFare)
+                    currentFare = None
+                for kid in fare[2]:
+                    if kid[0]=='farelinks_attr_name': key=kid[1]
+                    if kid[0]=='attr_values':
+                        for kidkid in kid[2]:
+                            if kidkid[0]=='attr_value': value = kidkid[1]
+                            if key=='modes': modes.append(value)
+                            if key.lower()=='oneway': oneway_flag = value in ['Y','T']
+                    if kid[0]=='semicolon_comment': comment = kid[1].strip()
+            if fare[0] == 'cost':
+                if currentFare:
+                    rows.append(currentFare)
+                    currentFare = None
+                cost = fare[1]
+
+            if len(nodepairs) > 0 and len(modes) > 0 and cost and oneway_flag is not None:
+                currentFare = FarelinksFare(links=nodepairs, modes=modes, price=cost, oneway=oneway_flag)
+                #print "Current Fare: ", str(currentFare)
+                cost, oneway_flag, modes, nodepairs = None, None, [], []
+
+        if currentFare: rows.append(currentFare)
+        return rows     

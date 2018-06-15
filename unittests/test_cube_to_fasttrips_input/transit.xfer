@@ -1,0 +1,7 @@
+;    A       B     TRANSFER TIME
+   183      135   0 ; R3 to downleft on-street node
+   183      131   0 ; R3 to downright on-street node
+   186      137   0 ; R2 to upleft on-street node
+   186      133   0 ; R2 to upright on-street node   
+   185      168   0 ; R1 to downleft on-street node
+   185      165   0 ; R1 to downright on-street node   

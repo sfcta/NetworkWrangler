@@ -111,7 +111,7 @@ def export_cubenet_to_csvs(file, extra_link_vars=[], extra_node_vars=[],
     print "Exported network to: %s, %s" % (env["CUBELINK_CSV"], env["CUBENODE_CSV"])
 
     
-def import_cube_nodes_links_from_csvs(cubeNetFile,
+def import_cube_nodes_links_from_csvs(cubeNetFile=None,
                                           extra_link_vars=[], extra_node_vars=[],
                                           links_csv=None, nodes_csv=None,
                                           exportIfExists=True):
@@ -124,9 +124,9 @@ def import_cube_nodes_links_from_csvs(cubeNetFile,
     """
 
     if not links_csv:
-        links_csv=os.path.join(os.environ['TEMP'],"node.csv")
+        links_csv=os.path.join(os.environ['TEMP'],"link.csv")
     if not nodes_csv:
-        nodes_csv=os.path.join(os.environ['TEMP'],"link.csv")
+        nodes_csv=os.path.join(os.environ['TEMP'],"node.csv")
 
     # don't export if
     if (not exportIfExists and links_csv and nodes_csv and 

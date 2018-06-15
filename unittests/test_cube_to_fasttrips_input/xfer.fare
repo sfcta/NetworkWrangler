@@ -1,0 +1,48 @@
+;this file Allfare contains the "transfer" fares for all modes
+;
+;This is being used for 2025, but is exactly the same as the 2000 fares
+
+; it uses the same fares as in the 2000 base run using the assumption that fares
+; keep up with inflation
+; $1.00 (01) = $0.70 (90)
+; These fares are from MTC's fare matrix with some exceptions.  Most
+; notably the fare for mode five was an average of the fares of the 
+; biggest transit agencies excluding Muni and BART.  Also, Samtrans
+; to SF fares were modified for consistency.  Other minor changes were
+; made as well.
+
+
+; See http://intranet/Modeling/NetworkUpdateChamp43
+; This is mostly a translation of the old 2000 fares
+; see Y:\networks\Fares\FareEncoding.xls for details
+
+XFARE[1][11]=200
+XFARE[1][12]=300
+XFARE[1][32]=400
+XFARE[2][11]=0
+XFARE[2][12]=0
+XFARE[2][32]=0
+XFARE[3][11]=200
+XFARE[3][12]=300
+XFARE[3][32]=400
+XFARE[4][11]=0
+XFARE[4][12]=0
+XFARE[4][32]=0
+XFARE[5][11]=200
+XFARE[5][12]=300
+XFARE[5][32]=400
+XFARE[6][11]=200
+XFARE[6][12]=300
+XFARE[6][32]=400
+XFARE[7][11]=200
+XFARE[7][12]=300
+XFARE[7][32]=400
+XFARE[11][11]=0
+XFARE[11][12]=250
+XFARE[11][32]=350
+XFARE[12][11]=150
+XFARE[12][12]=0
+XFARE[12][32]=350
+XFARE[32][11]=150
+XFARE[32][12]=250
+XFARE[32][32]=0

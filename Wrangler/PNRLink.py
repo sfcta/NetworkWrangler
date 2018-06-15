@@ -1,5 +1,5 @@
 import re
-from .Regexes import nodepair_pattern
+from .Regexes import * #nodepair_pattern
 
 __all__ = ['PNRLink']
 
@@ -40,7 +40,7 @@ class PNRLink(dict):
          program generates an additional support (lot) link between the two nodes.
         """
         if self.id:
-            m = re.match(nodepair_pattern, self.id)
+            m = re.match(Regexes.nodepair_pattern, self.id)
             
             # it's either just the station
             if m == None: # it's a nodenum

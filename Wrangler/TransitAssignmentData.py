@@ -3,7 +3,7 @@
 # based on old "combineTransitDBFs.py"
 #
 import csv,os,logging,string,sys,xlrd
-from dataTable import DataTable, dbfTableReader, FieldType
+from _static.dataTable import DataTable, dbfTableReader, FieldType
 from .TransitCapacity import TransitCapacity
 from .TransitLine import TransitLine
 from .Logger import WranglerLogger

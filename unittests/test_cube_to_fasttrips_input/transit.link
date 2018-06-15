@@ -1,0 +1,4 @@
+LINK nodes=185,186, modes=32, oneway=no, time=2.0 ;R1-R2
+LINK nodes=186,183, modes=32, oneway=no, time=3.0 ;R2-R3
+LINK nodes=144,128, modes=12, oneway=no, time=8.0 ;B1-B3
+
