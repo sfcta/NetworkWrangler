@@ -59,5 +59,5 @@ or suggestions please file them in the [issue tracker][issues]. If you have
 explicit changes please fork the [git repo][repo] and submit a pull request.
 
 ### Changelog
-2.1 Adds ability to build GTFS-PLUS networks.
+2.1 Adds ability to build GTFS-PLUS networks.  
 2.0 Made NetworkWrangler compatible with SF-CHAMP 5.0.  
