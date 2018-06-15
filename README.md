@@ -29,14 +29,8 @@ The base network and resulting network are in the [Citilabs Cube](http://www.cit
 
 ## Creating GTFS-PLUS networks for Fast-Trips
 NetworkWrangler is also a library that takes Cube networks prepared for SF-CHAMP,
-along with various other (optional) inputs, and creates networks in GTFS-PLUS, a 
-GTFS-based network format developed for use with Fast-Trips, a dynamic transit 
+along with various other (optional) inputs, and creates networks in [GTFS-PLUS](https://github.com/osplanning-data-standards/GTFS-PLUS), a [GTFS](https://developers.google.com/transit/gtfs/reference)-based network format developed for use with [Fast-Trips](https://github.com/BayAreaMetro/fast-trips), a dynamic transit 
 passenger assignment model.  
-
-[issues](https://github.com/sfcta/NetworkWrangler/issues)  
-[repo](https://github.com/sfcta/NetworkWrangler/tree/fasttrips)  
-[GTFS](https://developers.google.com/transit/gtfs/reference)  
-[GTFS-PLUS](https://github.com/osplanning-data-standards/GTFS-PLUS)  
 
 Usage
 =======
