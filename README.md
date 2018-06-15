@@ -1,7 +1,7 @@
 NetworkWrangler
 ===============
 
-**version**: 2.1
+**version**: 2.1  
 **updated**: 14 June 2018  
 **authors**:
 
@@ -13,7 +13,7 @@ Contributors include:
 * Drew Cooper, 2013-Present
 * Bhargava Sana, 2015-Present
 
-NetworkWrangler is licensed under [BSD (3-clause version)]: https://github.com/sfcta/NetworkWrangler/LICENSE
+NetworkWrangler is licensed under [BSD (3-clause version)](https://github.com/sfcta/NetworkWrangler/LICENSE)
 
 NetworkWrangler has two primary functions: 
 1. Create Citilabs Cube networks for SF-CHAMP
@@ -25,7 +25,7 @@ and transit projects as collection of data files in a local git repository,
 and then create networks by starting with a base network and applying a
 set of projects to that base network.
 
-The base network and resulting network are in the Citilabs Cube format (http://www.citilabs.com/software/cube/)
+The base network and resulting network are in the [Citilabs Cube](http://www.citilabs.com/software/cube/) format 
 
 ## Creating GTFS-PLUS networks for Fast-Trips
 NetworkWrangler is also a library that takes Cube networks prepared for SF-CHAMP,
@@ -33,17 +33,17 @@ along with various other (optional) inputs, and creates networks in GTFS-PLUS, a
 GTFS-based network format developed for use with Fast-Trips, a dynamic transit 
 passenger assignment model.  
 
-[issues]: https://github.com/sfcta/NetworkWrangler/issues
-[repo]: https://github.com/sfcta/NetworkWrangler/tree/fasttrips
-[GTFS]: https://developers.google.com/transit/gtfs/reference
-[GTFS-PLUS]: https://github.com/osplanning-data-standards/GTFS-PLUS
+[issues](https://github.com/sfcta/NetworkWrangler/issues)  
+[repo](https://github.com/sfcta/NetworkWrangler/tree/fasttrips)  
+[GTFS](https://developers.google.com/transit/gtfs/reference)  
+[GTFS-PLUS](https://github.com/osplanning-data-standards/GTFS-PLUS)  
 
 Usage
 =======
 ## Building Cube Networks for SF-CHAMP
 Build a network by running the `build_network.py` script  in the `/scripts` folder.
 
-   python build_network.py [-c configword] [-m test] network_specification.py
+	python build_network.py [-c configword] [-m test] network_specification.py
 
 This will build a network using the specifications in `network_specification.py`, which should define the variables listed below (in this script)
   
