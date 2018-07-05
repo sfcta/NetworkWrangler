@@ -58,6 +58,13 @@ NOTE: This is still under development. If you have comments
 or suggestions please file them in the [issue tracker][issues]. If you have
 explicit changes please fork the [git repo][repo] and submit a pull request.
 
+After script has run:
+
+  * Add dwell time formula in vehicles_ft.txt (see network 1.12_fare)
+  * Change the "transfer" field values for sf_muni_express_bus_allday, sf_muni_light_rail_allday, sf_muni_local_bus_allday to 2 in fare_attributes_ft.txt
+  * Change the "mode" for ace_ACE_ from "inter_regional_rail" to "commuter_rail" in routes_ft.txt
+  * Replace zones_ft.txt with the version with non-zero zone_lon and zone_lat values (see network 1.12_fare)
+
 ### Changelog
 2.1 Adds ability to build GTFS-PLUS networks.  
 2.0 Made NetworkWrangler compatible with SF-CHAMP 5.0.  
