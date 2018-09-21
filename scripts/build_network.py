@@ -19,7 +19,7 @@ USAGE = """
     * networks are built in OUT_DIR\TEST_hwy and OUT_DIR\TEST_trn
     * RTP projects are not applied
     * TAG is not used for TEST_PROJECTS
-    
+     
     (Yes, you could just specify "-t" but I want you to spell it out. :)
 
   The [-c configword] is if you want an optional word for your network_specification.py
@@ -98,6 +98,9 @@ APPLIED_PROJECTS = None
 # OPTIONAL.  A list of project names.  For test mode, these projects won't use
 # the TAG.  This is meant for developing a network project.
 TEST_PROJECTS = None
+
+# Prompt user if project has not been updated in STALE_YEARS.
+STALE_YEARS = 2
 
 CHAMPVERSION = 5.0
 CHAMP_NODE_NAMES = r'Y:\champ\util\nodes.xls'
@@ -298,7 +301,7 @@ def getProjectAttributes(project):
 
 if __name__ == '__main__':
     os.system('mode con:cols=100')
-    optlist,args    = getopt.getopt(sys.argv[1:],'c:m:')
+    optlist,args    = getopt.getopt(sys.argv[1:],'c:m:y:')
     NOW = time.strftime("%Y%b%d.%H%M%S")
     os.environ['CHAMP_NODE_NAMES'] = CHAMP_NODE_NAMES
     
@@ -320,6 +323,7 @@ if __name__ == '__main__':
     for o,a in optlist:
         if o=="-m": BUILD_MODE = a
         if o=="-c": CONFIG_WORD = a
+        if o=="-y": STALE_YEARS = float(a)
         
     if BUILD_MODE not in [None,"test"]:
         print USAGE
@@ -537,7 +541,7 @@ if __name__ == '__main__':
                 applied_commit_age = datetime.datetime.now() - applied_commit_date
                 
                 # if older than one year, holler
-                STALE_YEARS = 2
+                
                 if applied_commit_age > datetime.timedelta(days=365*STALE_YEARS):
                     Wrangler.WranglerLogger.warn("  This project was last updated %.1f years ago (over %d), on %s" % \
                                                  (applied_commit_age.days/365.0, 
