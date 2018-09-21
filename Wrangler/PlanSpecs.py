@@ -66,6 +66,9 @@ class PlanSpecs:
                 except Exception as e:
                     self.projectdict[project_name]['tag'] = None
                     #WranglerLogger.debug('project %s: TAG error: %s' % (project_name, e))
+
+##                if kwargs:
+##                    self.projectdict[project_name]["kwargs"]=kwargs
                     
                 # if project = "dir1/dir2" assume dir1 is git, dir2 is the projectsubdir
                 (head,tail) = os.path.split(project_name)
