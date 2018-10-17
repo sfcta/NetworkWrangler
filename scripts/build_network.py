@@ -364,6 +364,8 @@ if __name__ == '__main__':
     Wrangler.setupLogging(LOG_FILENAME, LOG_FILENAME.replace("info", "debug"))
     Wrangler.TransitNetwork.capacity = Wrangler.TransitCapacity(directory=TRANSIT_CAPACITY_DIR)
 
+    (project_name, projType, tag, kwargs) = getProjectAttributes(NETWORK_PROJECTS['hwy'][0]) if len(NETWORK_PROJECTS['hwy']) > 0 else (None, None, None, None)
+    pop_index = 0
     # Prepend the RTP roadway projects (if applicable -- not TEST mode and YEAR!=PIVOT_YEAR)
     NONSF_PLANBAYAREA_SPECS = None
     if BUILD_MODE != "test" and YEAR!=PIVOT_YEAR:
@@ -378,6 +380,7 @@ if __name__ == '__main__':
 
         # prepend the whole list to the hwy projects
         NETWORK_PROJECTS['hwy'] = nonsf_projdirlist + NETWORK_PROJECTS['hwy']
+        pop_index = len(nonsf_projdirlist)
 
     # Create a scratch directory to check out project repos into
     SCRATCH_SUBDIR = "scratch"
@@ -386,12 +389,16 @@ if __name__ == '__main__':
     os.chdir(SCRATCH_SUBDIR)
     
     # Initialize networks
-    (project_name, projType, tag, kwargs) = getProjectAttributes(NETWORK_PROJECTS['hwy'][0]) if len(NETWORK_PROJECTS['hwy']) > 0 else (None, None, None, None)
-    
+    BASE_HWY_TAG = TAG
     if PIVOT_DIR:
+        # if this pivots off of an already built network...
         hwy_basenetworkpath = os.path.join(PIVOT_DIR,"hwy")
     elif projType == 'seed':
+        # if the seed is the first item in the project list, then make it the basenetworkpath, 
+        # then remove it from the front so it doesn't get applied twice
         hwy_basenetworkpath = project_name
+        BASE_HWY_TAG = tag
+        NETWORK_PROJECTS['hwy'].pop(pop_index)
     else:
         hwy_basenetworkpath = "Roads2010"
     
@@ -402,7 +409,7 @@ if __name__ == '__main__':
                                                networkSeedSubdir=NETWORK_SEED_SUBDIR,
                                                networkPlanSubdir=NETWORK_PLAN_SUBDIR,
                                                isTiered=True if PIVOT_DIR else False,
-                                               tag=TAG,
+                                               tag=BASE_HWY_TAG,
                                                hwyspecsdir=NONSF_RTPDIR,
                                                hwyspecs=NONSF_PLANBAYAREA_SPECS,
                                                tempdir=TEMP_SUBDIR,
