@@ -19,7 +19,7 @@ USAGE = """
     * networks are built in OUT_DIR\TEST_hwy and OUT_DIR\TEST_trn
     * RTP projects are not applied
     * TAG is not used for TEST_PROJECTS
-    
+     
     (Yes, you could just specify "-t" but I want you to spell it out. :)
 
   The [-c configword] is if you want an optional word for your network_specification.py
@@ -98,6 +98,9 @@ APPLIED_PROJECTS = None
 # OPTIONAL.  A list of project names.  For test mode, these projects won't use
 # the TAG.  This is meant for developing a network project.
 TEST_PROJECTS = None
+
+# Prompt user if project has not been updated in STALE_YEARS.
+STALE_YEARS = 2
 
 CHAMPVERSION = 5.0
 CHAMP_NODE_NAMES = r'Y:\champ\util\nodes.xls'
@@ -298,7 +301,7 @@ def getProjectAttributes(project):
 
 if __name__ == '__main__':
     os.system('mode con:cols=100')
-    optlist,args    = getopt.getopt(sys.argv[1:],'c:m:')
+    optlist,args    = getopt.getopt(sys.argv[1:],'c:m:y:')
     NOW = time.strftime("%Y%b%d.%H%M%S")
     os.environ['CHAMP_NODE_NAMES'] = CHAMP_NODE_NAMES
     
@@ -320,6 +323,7 @@ if __name__ == '__main__':
     for o,a in optlist:
         if o=="-m": BUILD_MODE = a
         if o=="-c": CONFIG_WORD = a
+        if o=="-y": STALE_YEARS = float(a)
         
     if BUILD_MODE not in [None,"test"]:
         print USAGE
@@ -360,6 +364,8 @@ if __name__ == '__main__':
     Wrangler.setupLogging(LOG_FILENAME, LOG_FILENAME.replace("info", "debug"))
     Wrangler.TransitNetwork.capacity = Wrangler.TransitCapacity(directory=TRANSIT_CAPACITY_DIR)
 
+    (project_name, projType, tag, kwargs) = getProjectAttributes(NETWORK_PROJECTS['hwy'][0]) if len(NETWORK_PROJECTS['hwy']) > 0 else (None, None, None, None)
+    pop_index = 0
     # Prepend the RTP roadway projects (if applicable -- not TEST mode and YEAR!=PIVOT_YEAR)
     NONSF_PLANBAYAREA_SPECS = None
     if BUILD_MODE != "test" and YEAR!=PIVOT_YEAR:
@@ -374,6 +380,7 @@ if __name__ == '__main__':
 
         # prepend the whole list to the hwy projects
         NETWORK_PROJECTS['hwy'] = nonsf_projdirlist + NETWORK_PROJECTS['hwy']
+        pop_index = len(nonsf_projdirlist)
 
     # Create a scratch directory to check out project repos into
     SCRATCH_SUBDIR = "scratch"
@@ -382,14 +389,27 @@ if __name__ == '__main__':
     os.chdir(SCRATCH_SUBDIR)
     
     # Initialize networks
+    BASE_HWY_TAG = TAG
+    if PIVOT_DIR:
+        # if this pivots off of an already built network...
+        hwy_basenetworkpath = os.path.join(PIVOT_DIR,"hwy")
+    elif projType == 'seed':
+        # if the seed is the first item in the project list, then make it the basenetworkpath, 
+        # then remove it from the front so it doesn't get applied twice
+        hwy_basenetworkpath = project_name
+        BASE_HWY_TAG = tag
+        NETWORK_PROJECTS['hwy'].pop(pop_index)
+    else:
+        hwy_basenetworkpath = "Roads2010"
+    
     networks = {'hwy' :Wrangler.HighwayNetwork(champVersion=CHAMPVERSION,
-                                               basenetworkpath=os.path.join(PIVOT_DIR,"hwy") if PIVOT_DIR else "Roads2010",
+                                               basenetworkpath=hwy_basenetworkpath,
                                                networkBaseDir=NETWORK_BASE_DIR,
                                                networkProjectSubdir=NETWORK_PROJECT_SUBDIR,
                                                networkSeedSubdir=NETWORK_SEED_SUBDIR,
                                                networkPlanSubdir=NETWORK_PLAN_SUBDIR,
                                                isTiered=True if PIVOT_DIR else False,
-                                               tag=TAG,
+                                               tag=BASE_HWY_TAG,
                                                hwyspecsdir=NONSF_RTPDIR,
                                                hwyspecs=NONSF_PLANBAYAREA_SPECS,
                                                tempdir=TEMP_SUBDIR,
@@ -528,7 +548,7 @@ if __name__ == '__main__':
                 applied_commit_age = datetime.datetime.now() - applied_commit_date
                 
                 # if older than one year, holler
-                STALE_YEARS = 2
+                
                 if applied_commit_age > datetime.timedelta(days=365*STALE_YEARS):
                     Wrangler.WranglerLogger.warn("  This project was last updated %.1f years ago (over %d), on %s" % \
                                                  (applied_commit_age.days/365.0, 
@@ -619,7 +639,7 @@ if __name__ == '__main__':
             else:
                 (parentdir, networkdir, gitdir, projectsubdir) = networks[netmode].getClonedProjectArgs(project_name, None, projType, TEMP_SUBDIR)
 
-            applied_SHA1 = networks[netmode].applyProject(parentdir, networkdir, gitdir, projectsubdir)
+            applied_SHA1 = networks[netmode].applyProject(parentdir, networkdir, gitdir, projectsubdir, **kwargs)
             appliedcount += 1
 
     # Network Loop #3: write the networks.

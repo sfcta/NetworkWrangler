@@ -66,6 +66,9 @@ class PlanSpecs:
                 except Exception as e:
                     self.projectdict[project_name]['tag'] = None
                     #WranglerLogger.debug('project %s: TAG error: %s' % (project_name, e))
+
+##                if kwargs:
+##                    self.projectdict[project_name]["kwargs"]=kwargs
                     
                 # if project = "dir1/dir2" assume dir1 is git, dir2 is the projectsubdir
                 (head,tail) = os.path.split(project_name)
@@ -104,11 +107,11 @@ class PlanSpecs:
 
         for proj in self.projects:
             if netType in self.projectdict[proj]['nettypes']:
-                projectlist.append(self.projectAsDict(proj))
-##                if not self.modelyear or self.modelyear >= self.projectdict[proj]["year"]:
-##                    projectlist.append(self.projectAsDict(proj))
-##                else:
-##                    WranglerLogger.warn("not applying %s, projectyear %d >= modelyear %d" % (proj, self.projectdict[proj]["year"], self.modelyear))
+##              projectlist.append(self.projectAsDict(proj))
+                if not self.modelyear or self.modelyear >= self.projectdict[proj]["year"]:
+                    projectlist.append(self.projectAsDict(proj))
+                else:
+                    WranglerLogger.warn("not applying %s, projectyear %d >= modelyear %d" % (proj, self.projectdict[proj]["year"], self.modelyear))
         return projectlist
         
     def printProjects(self,fileObj):
