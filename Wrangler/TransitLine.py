@@ -41,7 +41,7 @@ class TransitLine(object):
                          "LRT":[14,15,21],
                          "Premium":[22,23,24,25,26,27,28,29,30],
                          "Ferry":[31],
-                         "BART":[32]
+                         "BART":[32,33]
                          }
     
     # Do these modes have offstreet stops?
@@ -66,7 +66,8 @@ class TransitLine(object):
                             29:True,  # Regional Rail/ACE/Amtrak
                             30:True,  # HSR
                             31:True,  # Ferry
-                            32:True   # BART
+                            32:True,  # BART
+                            33:True   # BART							
                             }
     
     def __init__(self, name=None, template=None):
